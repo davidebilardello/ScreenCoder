@@ -1,0 +1,59 @@
+Start main
+Extracting bboxes from HTML...
+Extracted 4 regions, 2 placeholders.
+[*] Detected different X/Y scales. X: 2.63, Y: 2.38
+Drawing bboxes...
+Success: BBox overlay saved to data/tmp/debug_gray_bboxes_test1.png
+
+=== BBox (proportional to image dimensions) ===
+{
+  "regions": [
+    {
+      "id": "1",
+      "x": 0.0,
+      "y": 0.0,
+      "w": 2.0374109263657956,
+      "h": 0.06315789473684211
+    },
+    {
+      "id": "2",
+      "x": 0.0,
+      "y": 0.06315789473684211,
+      "w": 0.1496437054631829,
+      "h": 0.9111111111111111
+    },
+    {
+      "id": "3",
+      "x": 0.1496437054631829,
+      "y": 0.06315789473684211,
+      "w": 1.8874703087885987,
+      "h": 0.04327485380116959
+    },
+    {
+      "id": "4",
+      "x": 0.1496437054631829,
+      "y": 0.10701754385964912,
+      "w": 1.8874703087885987,
+      "h": 0.867251461988304
+    }
+  ],
+  "placeholders": [
+    {
+      "id": "ph0",
+      "x": 0.02494061757719715,
+      "y": 0.6187134502923977,
+      "w": 0.015736342042755345,
+      "h": 0.05555555555555555,
+      "region_id": "2"
+    },
+    {
+      "id": "ph1",
+      "x": 1.5685866983372923,
+      "y": 0.20701754385964913,
+      "w": 0.006235154394299287,
+      "h": 0.011111111111111112,
+      "region_id": "4"
+    }
+  ]
+}
+Success: BBox list saved to data/tmp/test1_bboxes.json

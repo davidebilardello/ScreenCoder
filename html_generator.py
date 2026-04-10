@@ -1,4 +1,4 @@
-from utils import encode_image, Doubao, Qwen, GPT, Gemini
+from utils import encode_image, Doubao, Qwen, GPT, Gemini, LMStudio
 from PIL import Image
 import bs4
 from threading import Thread
@@ -14,92 +14,91 @@ user_instruction = {
 
 # We provide prompts in both Chinese and English.
 # Chinese prompts for each region
-PROMPT_DICT = {
-    "sidebar": f"""这是一个container的截图。这是用户给的额外要求：{user_instruction["sidebar"]}请填写一段完整的HTML和tail-wind CSS代码以准确再现给定的容器。请注意所有组块的排版、图标样式、大小、文字信息需要在用户额外条件的基础上与原始截图基本保持一致。以下是供填写的代码：
-
-    <div>
-    your code here
-    </div>
-
-    只需返回<div>和</div>标签内的代码""",
-
-    "header": f"""这是一个container的截图。这是用户给的额外要求：{user_instruction["header"]}请填写一段完整的HTML和tail-wind CSS代码以准确再现给定的容器。请注意所有组块在boundary box中的相对位置、排版、文字信息、颜色需要在用户额外条件的基础上与原始截图基本保持一致。以下是供填写的代码：
-
-    <div>
-    your code here
-    </div>
-
-    只需返回<div>和</div>标签内的代码""",
-
-    "navigation": f"""这是一个container的截图。这是用户给的额外要求：{user_instruction["navigation"]}请填写一段完整的HTML和tail-wind CSS代码以准确再现给定的容器。请注意所有组块的在boundary box中的相对位置、文字排版、颜色需要在用户额外条件的基础上与原始截图基本保持一致。请你直接使用原始截图中一致的图标。以下是供填写的代码：
-
-    <div>
-    your code here
-    </div>
-
-    只需返回<div>和</div>标签内的代码""",
-
-    "main content": f"""这是一个container的截图。这是用户给的额外要求：{user_instruction["main content"]}请填写一段完整的HTML和tail-wind CSS代码以准确再现给定的容器。请使用相同大小的纯灰色图像块替换原始截图中的图像，不需要识别图像中的文字信息。请注意所有组块在boundary box中的相对位置、排版、文字信息、颜色需要在用户额外条件的基础上与原始截图基本保持一致。以下是供填写的代码：
-
-    <div>
-    your code here
-    </div>
-
-    只需返回<div>和</div>标签内的代码"""
-}
+#PROMPT_DICT = {
+#    "sidebar": f"""这是一个container的截图。这是用户给的额外要求：{user_instruction["sidebar"]}请填写一段完整的HTML和tail-wind CSS代码以准确再现给定的容器。请注意所有组块的排版、图标样式、大小、文字信息需要在用户额外条件的基础上与原始截图基本保持一致。以下是供填写的代码：
+#
+#    <div>
+#    your code here
+#    </div>
+#
+#    只需返回<div>和</div>标签内的代码""",
+#
+#    "header": f"""这是一个container的截图。这是用户给的额外要求：{user_instruction["header"]}请填写一段完整的HTML和tail-wind CSS代码以准确再现给定的容器。请注意所有组块在boundary box中的相对位置、排版、文字信息、颜色需要在用户额外条件的基础上与原始截图基本保持一致。以下是供填写的代码：
+#
+#    <div>
+#    your code here
+#    </div>
+#
+#    只需返回<div>和</div>标签内的代码""",
+#
+#    "navigation": f"""这是一个container的截图。这是用户给的额外要求：{user_instruction["navigation"]}请填写一段完整的HTML和tail-wind CSS代码以准确再现给定的容器。请注意所有组块的在boundary box中的相对位置、文字排版、颜色需要在用户额外条件的基础上与原始截图基本保持一致。请你直接使用原始截图中一致的图标。以下是供填写的代码：
+#
+#    <div>
+#    your code here
+#    </div>
+#
+#    只需返回<div>和</div>标签内的代码""",
+#
+#    "main content": f"""这是一个container的截图。这是用户给的额外要求：{user_instruction["main content"]}请填写一段完整的HTML和tail-wind CSS代码以准确再现给定的容器。请使用相同大小的纯灰色图像块替换原始截图中的图像，不需要识别图像中的文字信息。请注意所有组块在boundary box中的相对位置、排版、文字信息、颜色需要在用户额外条件的基础上与原始截图基本保持一致。以下是供填写的代码：
+#
+#    <div>
+#    your code here
+#    </div>
+#
+#    只需返回<div>和</div>标签内的代码"""
+#}
 
 # English prompts for each region
-# PROMPT_DICT = {
-#     "sidebar": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["sidebar"]}
-#     Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
-#     Please ensure that all block layouts, icon styles, sizes, and text information are consistent with the original screenshot,
-#     based on the user's additional conditions. Below is the code template to fill in:
+PROMPT_DICT = {
+     "sidebar": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["sidebar"]}
+     Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
+     Please ensure that all block layouts, icon styles, sizes, and text information are consistent with the original screenshot,
+     based on the user's additional conditions. Below is the code template to fill in:
+   
+     <div>
+     your code here
+     </div>
+   
+     You MUST output ONLY a valid JSON object containing a single key "html" with the code within the <div> and </div> tags as its string value.""",
+     "header": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["header"]}
+     Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
+     Please ensure that all blocks' relative positions, layout, text information, and colors within the bounding box
+     are consistent with the original screenshot, based on the user's additional conditions. Below is the code template to fill in:
     
-#     <div>
-#     your code here
-#     </div>
-    
-#     Only return the code within the <div> and </div> tags.""",
+     <div>
+     your code here
+    </div>
+   
+     You MUST output ONLY a valid JSON object containing a single key "html" with the code within the <div> and </div> tags as its string value.""",
 
-#     "header": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["header"]}
-#     Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
-#     Please ensure that all blocks' relative positions, layout, text information, and colors within the bounding box
-#     are consistent with the original screenshot, based on the user's additional conditions. Below is the code template to fill in:
+     "navigation": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["navigation"]}
+     Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
+     Please ensure that all blocks' relative positions, text layout, and colors within the bounding box
+     are consistent with the original screenshot, based on the user's additional conditions.
+     Please use the same icons as in the original screenshot. Below is the code template to fill in:
     
-#     <div>
-#     your code here
-#     </div>
+     <div>
+     your code here
+     </div>
     
-#     Only return the code within the <div> and </div> tags.""",
+     You MUST output ONLY a valid JSON object containing a single key "html" with the code within the <div> and </div> tags as its string value.""",
 
-#     "navigation": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["navigation"]}
-#     Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
-#     Please ensure that all blocks' relative positions, text layout, and colors within the bounding box
-#     are consistent with the original screenshot, based on the user's additional conditions.
-#     Please use the same icons as in the original screenshot. Below is the code template to fill in:
+     "main content": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["main content"]}
+     Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
+     Please replace the images in the original screenshot with solid gray blocks (bg-gray-400 tailwind class) of the same size;
+     text inside the images does not need to be recognized.
+     Please ensure that all blocks' relative positions, layout, text information, and colors within the bounding box
+     are consistent with the original screenshot, based on the user's additional conditions. Below is the code template to fill in:
     
-#     <div>
-#     your code here
-#     </div>
+     <div>
+     your code here
+     </div>
     
-#     Only return the code within the <div> and </div> tags.""",
-
-#     "main content": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["main content"]}
-#     Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
-#     Please replace the images in the original screenshot with solid gray blocks of the same size;
-#     text inside the images does not need to be recognized.
-#     Please ensure that all blocks' relative positions, layout, text information, and colors within the bounding box
-#     are consistent with the original screenshot, based on the user's additional conditions. Below is the code template to fill in:
-    
-#     <div>
-#     your code here
-#     </div>
-    
-#     Only return the code within the <div> and </div> tags."""
-# }
+     You MUST output ONLY a valid JSON object containing a single key "html" with the code within the <div> and </div> tags as its string value."""
+}
 
 # Support refining the generated code.
-# PROMPT_refinement = """Here is a prototype image of a webpage. I have an draft HTML file that contains most of the elements and their correct positions, but it has *inaccurate background*, and some missing or wrong elements. Please compare the draft and the prototype image, then revise the draft implementation. Return a single piece of accurate HTML+tail-wind CSS code to reproduce the website. Respond with the content of the HTML+tail-wind CSS code. The current implementation I have is: \n\n [CODE]"""
+PROMPT_refinement = """Here is a prototype image of a webpage. I have an draft HTML file that contains most of the elements and their correct positions, but it has *inaccurate background*, and some missing or wrong elements. Please compare the draft and the prototype image, then revise the draft implementation. Return a single piece of accurate HTML+tail-wind CSS code to reproduce the website. You MUST output ONLY a valid JSON object containing a single key "html" with the content of the HTML+tail-wind CSS code. The current implementation I have is: \n\n [CODE]"""
 
 # Generate code for each component
 def generate_code(bbox_tree, img_path, bot):
@@ -173,6 +172,7 @@ def generate_code_parallel(bbox_tree, img_path, bot):
                 for attempt in range(max_retries):
                     try:
                         code = bot.ask(prompt, encode_image(cropped_img))
+                        print(code)
                         code_dict[node["id"]] = code
                         return
                     except Exception as e:
@@ -316,11 +316,32 @@ def generate_html(bbox_tree, output_file="output.html", img_path="data/test1.png
 # Substitute the code in the html file
 def code_substitution(html_file, code_dict):
     """substitute the code in the html file"""
+    import re
+    import json
     with open(html_file, "r") as f:
         html = f.read()
     soup = bs4.BeautifulSoup(html, 'html.parser')
     for id, code in code_dict.items():
-        code = code.replace("```html", "").replace("```", "")
+        code = re.sub(r'<\|channel>thought.*?<channel\|>', '', code, flags=re.DOTALL)
+        code = code.replace('</channel|>', '')
+        code = re.sub(r'<think>.*?</think>', '', code, flags=re.DOTALL)
+        
+        # Parse JSON to extract the HTML content safely
+        try:
+            cleaned_code = code.strip()
+            if cleaned_code.startswith("```json"):
+                cleaned_code = cleaned_code[7:]
+            if cleaned_code.startswith("```"):
+                cleaned_code = cleaned_code[3:]
+            if cleaned_code.endswith("```"):
+                cleaned_code = cleaned_code[:-3]
+            parsed_json = json.loads(cleaned_code.strip())
+            if "html" in parsed_json:
+                code = parsed_json["html"]
+        except Exception:
+            pass
+            
+        code = code.replace("```html", "").replace("```", "").strip()
         div = soup.find(id=id)
         # replace the inner html of the div
         if div:
@@ -328,23 +349,39 @@ def code_substitution(html_file, code_dict):
     with open(html_file, "w") as f:
         f.write(soup.prettify())
 
-# def html_refinement(html_file, output_file, img_path, bot):
-#     """refine the html file"""
-#     try:
-#         with open(html_file, "r") as f:
-#             html_content = f.read()
+def html_refinement(html_file, output_file, img_path, bot):
+     """refine the html file"""
+     import json
+     try:
+         with open(html_file, "r") as f:
+             html_content = f.read()
 
-#         img = Image.open(img_path)
+         img = Image.open(img_path)
 
-#         prompt = PROMPT_refinement.replace("[CODE]", html_content)
+         prompt = PROMPT_refinement.replace("[CODE]", html_content)
 
-#         refined_html = bot.ask(prompt, encode_image(img))
-#         refined_html = refined_html.replace("```html", "").replace("```", "").strip()
+         refined_html = bot.ask(prompt, encode_image(img))
+         
+         try:
+             cleaned_ref = refined_html.strip()
+             if cleaned_ref.startswith("```json"):
+                 cleaned_ref = cleaned_ref[7:]
+             if cleaned_ref.startswith("```"):
+                 cleaned_ref = cleaned_ref[3:]
+             if cleaned_ref.endswith("```"):
+                 cleaned_ref = cleaned_ref[:-3]
+             parsed_ref = json.loads(cleaned_ref.strip())
+             if "html" in parsed_ref:
+                 refined_html = parsed_ref["html"]
+         except Exception:
+             pass
+             
+         refined_html = refined_html.replace("```html", "").replace("```", "").strip()
 
-#         with open(output_file, "w") as f:
-#             f.write(refined_html)
-#     except Exception as e:
-#         print(f"An error occurred during HTML refinement: {e}")
+         with open(output_file, "w") as f:
+             f.write(refined_html)
+     except Exception as e:
+        print(f"An error occurred during HTML refinement: {e}")
 
 # Main
 if __name__ == "__main__":
@@ -396,8 +433,8 @@ if __name__ == "__main__":
     generate_html(root, 'data/tmp/test1_layout.html')
 
     # Initialize the bot
-    # Change your model & API ket path according to your needs
-    bot = Doubao("doubao_api.txt", model = "doubao-1.5-thinking-vision-pro-250428")
+    bot = LMStudio("lm-studio", model="local-model")
+    # bot = Doubao("doubao_api.txt", model = "doubao-1.5-thinking-vision-pro-250428")
     # bot = Qwen("qwen_api.txt", model="qwen2.5-vl-72b-instruct")
     # bot = GPT("gpt_api.txt", model="gpt-4o")
     # bot = Gemini("gemini_api.txt", model="gemini-1.5-flash-latest")
@@ -411,4 +448,4 @@ if __name__ == "__main__":
     code_substitution('data/tmp/test1_layout.html', code_dict)
 
     # Refine the html file
-    # html_refinement('data/tmp/test1_layout.html', 'data/tmp/test1_layout_refined.html', img_path, bot)
+    #html_refinement('data/tmp/test1_layout.html', 'data/tmp/test1_layout_refined.html', img_path, bot)

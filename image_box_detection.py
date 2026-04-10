@@ -11,7 +11,7 @@ async def extract_bboxes_from_html(html_path: Path):
             viewport={"width": 1280, "height": 720},
         )
         page = await ctx.new_page()
-        await page.goto(html_path.resolve().as_uri())
+        await page.goto(html_path.resolve().as_uri(), wait_until="domcontentloaded")
 
         metrics = await page.evaluate("""
             () => {
@@ -26,14 +26,16 @@ async def extract_bboxes_from_html(html_path: Path):
                 const placeholder_bboxes = [];
                 let ph_id_counter = 0;
                 //精准检测
-                const all_potential_placeholders = document.querySelectorAll('.bg-gray-400');
+                const all_potential_placeholders = document.querySelectorAll('.bg-gray-200, .bg-gray-300, .bg-gray-400, .bg-gray-500, .bg-gray-600, img');
 
                 for (const el of all_potential_placeholders) {
                     // Apply the same filters as before
                     if (el.tagName === 'SVG') continue;
-                    if (el.innerText && el.innerText.trim() !== '') continue;
+                    if (el.tagName !== 'IMG' && el.innerText && el.innerText.trim() !== '') continue;
                     
                     const el_rect = el.getBoundingClientRect();
+                    if (el_rect.width < 5 || el_rect.height < 5) continue;
+                    
                     const el_center = { x: el_rect.left + el_rect.width / 2, y: el_rect.top + el_rect.height / 2 };
                     
                     // Find which region this placeholder is inside
@@ -49,14 +51,24 @@ async def extract_bboxes_from_html(html_path: Path):
                     
                     // Only include placeholders that are inside a detected region
                     if (containing_region_id) {
-                        placeholder_bboxes.push({
-                            id: 'ph' + ph_id_counter++,
-                            x: el_rect.x,
-                            y: el_rect.y,
-                            w: el_rect.width,
-                            h: el_rect.height,
-                            region_id: containing_region_id
-                        });
+                        let is_duplicate = false;
+                        for (const existing_ph of placeholder_bboxes) {
+                            if (Math.abs(el_rect.x - existing_ph.x) < 5 && Math.abs(el_rect.y - existing_ph.y) < 5 &&
+                                Math.abs(el_rect.width - existing_ph.w) < 5 && Math.abs(el_rect.height - existing_ph.h) < 5) {
+                                is_duplicate = true;
+                                break;
+                            }
+                        }
+                        if (!is_duplicate) {
+                            placeholder_bboxes.push({
+                                id: 'ph' + ph_id_counter++,
+                                x: el_rect.x,
+                                y: el_rect.y,
+                                w: el_rect.width,
+                                h: el_rect.height,
+                                region_id: containing_region_id
+                            });
+                        }
                     }
                 }
 
@@ -206,7 +218,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Draw BBoxes parsed from HTML on the original screenshot"
     )
-    parser.add_argument("--html", required=False, type=Path, default=Path("data/output/test1_layout.html"),
+    parser.add_argument("--html", required=False, type=Path, default=Path("data/tmp/test1_layout.html"),
                         help="Generated HTML file (with gray placeholder)")
     parser.add_argument("--screenshot", required=False, type=Path, default=Path("data/input/test1.png"),
                         help="Original UI screenshot (with real thumbnails)")

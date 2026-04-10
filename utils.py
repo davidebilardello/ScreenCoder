@@ -224,6 +224,62 @@ class Bot:
                 time.sleep(5)
         return None
 
+class LMStudio(Bot):
+    def __init__(self, key_path="lm-studio", patience=3, model="local-model") -> None:
+        super().__init__(key_path, patience)
+        self.client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
+        self.name="lm-studio"
+        self.model = model
+        
+    def ask(self, question, image_encoding=None, verbose=False, json=True):
+        
+        if image_encoding:
+            content =    {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": question},
+                {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/png;base64,{image_encoding}",
+                },
+                },
+            ],
+            }
+        else:
+            content = {"role": "user", "content": question}
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+            content
+            ],
+            max_tokens=4096,
+            temperature=0.1,  # Aumentato da 0 a 0.1 per evitare loop
+            frequency_penalty=0.3,  # Disincentiva la ripetizione della stessa parola
+            seed=42,
+            response_format= {"type": "text"} if json==False else  {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "html_out",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "html": {"type": "string"}
+                        },
+                        "required": ["html"]
+                    }
+                }
+            }
+        )
+        response = response.choices[0].message.content
+        if verbose:
+            print("####################################")
+            print("question:\n", question)
+            print("####################################")
+            print("response:\n", response)
+            print("seed used: 42")
+        return response
+
 class Doubao(Bot):
     def __init__(self, key_path, patience=3, model="doubao-1.5-thinking-vision-pro-250428") -> None:
         super().__init__(key_path, patience)

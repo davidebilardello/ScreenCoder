@@ -1,0 +1,47 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="annotated-types" />
+          <option value="docker-pycreds" />
+          <option value="dotenv" />
+          <option value="gitdb" />
+          <option value="GitPython" />
+          <option value="nvidia-cublas-cu11" />
+          <option value="nvidia-cuda-cupti-cu11" />
+          <option value="nvidia-cuda-nvrtc-cu11" />
+          <option value="nvidia-cuda-runtime-cu11" />
+          <option value="nvidia-cudnn-cu11" />
+          <option value="nvidia-cufft-cu11" />
+          <option value="nvidia-curand-cu11" />
+          <option value="nvidia-cusolver-cu11" />
+          <option value="nvidia-cusparse-cu11" />
+          <option value="nvidia-nccl-cu11" />
+          <option value="nvidia-nvtx-cu11" />
+          <option value="opencv-python" />
+          <option value="pandas" />
+          <option value="platformdirs" />
+          <option value="protobuf" />
+          <option value="psutil" />
+          <option value="py-cpuinfo" />
+          <option value="pydantic" />
+          <option value="pydantic_core" />
+          <option value="python-dotenv" />
+          <option value="pytz" />
+          <option value="sentry-sdk" />
+          <option value="setproctitle" />
+          <option value="smmap" />
+          <option value="torchaudio" />
+          <option value="tqdm" />
+          <option value="typing-inspection" />
+          <option value="tzdata" />
+          <option value="ultralytics" />
+          <option value="ultralytics-thop" />
+          <option value="wandb" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>

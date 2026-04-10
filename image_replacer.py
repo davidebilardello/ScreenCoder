@@ -133,7 +133,7 @@ if __name__ == "__main__":
         mapping=Path('data/tmp/mapping_full_test1.json'),
         uied=Path('data/tmp/ip/test1.json'),
         original_image=Path('data/input/test1.png'),
-        gray_html=Path('data/output/test1_layout.html'),
+        gray_html=Path('data/tmp/test1_layout.html'),
         output_html=Path('data/output/test1_layout_final.html')
     )
 

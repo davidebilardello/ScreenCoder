@@ -62,13 +62,13 @@ if __name__ == '__main__':
                   'merge-contained-ele':True, 'merge-line-to-paragraph':False, 'remove-bar':True}
 
     # set input image path
-    input_path_img = 'data/input/test4.png'
+    input_path_img = 'data/input/test1.png'
     output_root = 'data/tmp'
 
     resized_height = resize_height_by_longest_edge(input_path_img, resize_length=800)
     color_tips()
 
-    is_ip = False
+    is_ip = True
     is_clf = False
     is_ocr = False
     is_merge = False
