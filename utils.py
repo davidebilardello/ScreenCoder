@@ -436,3 +436,49 @@ class Gemini(Bot):
             self.file_count += 1
 
         return response.text
+
+class VLLMBot(Bot):
+    def __init__(self, key_path="", patience=3, model="Qwen/Qwen2.5-VL-7B-Instruct") -> None:
+        super().__init__(key_path, patience)
+        from vllm import LLM
+        import threading
+        self.llm = LLM(model=model, trust_remote_code=True, max_model_len=4096)
+        self.name = "vllm"
+        self.model = model
+        self.lock = threading.Lock()
+        
+    def ask(self, question, image_encoding=None, verbose=False, json=True):
+        from vllm import SamplingParams
+        
+        if image_encoding:
+            content = [
+                {"type": "text", "text": question},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{image_encoding}",
+                    },
+                },
+            ]
+            messages = [{"role": "user", "content": content}]
+        else:
+            messages = [{"role": "user", "content": question}]
+            
+        sampling_params = SamplingParams(
+            temperature=0.1,
+            max_tokens=4096,
+            seed=42,
+        )
+        
+        with self.lock:
+            outputs = self.llm.chat(messages=messages, sampling_params=sampling_params)
+            
+        response = outputs[0].outputs[0].text
+        
+        if verbose:
+            print("####################################")
+            print("question:\n", question)
+            print("####################################")
+            print("response:\n", response)
+            print("seed used: 42")
+        return response

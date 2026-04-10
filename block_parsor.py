@@ -1,7 +1,7 @@
 import os
 import cv2
 import json
-from utils import Doubao, Qwen, GPT, Gemini, LMStudio, encode_image, image_mask
+from utils import Doubao, Qwen, GPT, Gemini, LMStudio, VLLMBot, encode_image, image_mask
 
 DEFAULT_IMAGE_PATH = "data/input/test1.png"
 DEFAULT_API_PATH = "lm-studio"  # Changed to lm-studio
@@ -321,7 +321,8 @@ if __name__ == "__main__":
     print("=== Starting Simple Component Detection ===")
     print(f"Input image: {image_path}")
     print(f"API path: {api_path}")
-    client = LMStudio(api_path) # Changed to LMStudio
+    # client = LMStudio(api_path) # Changed to LMStudio
+    client = VLLMBot(model="Qwen/Qwen2.5-VL-7B-Instruct")
     bbox_content = client.ask(PROMPT_MERGE, encode_image(image_path), False,False)
     print(f"Model response: {bbox_content}\n")
     bboxes = parse_bboxes(bbox_content, image_path)

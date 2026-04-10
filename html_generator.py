@@ -1,4 +1,4 @@
-from utils import encode_image, Doubao, Qwen, GPT, Gemini, LMStudio
+from utils import encode_image, Doubao, Qwen, GPT, Gemini, LMStudio, VLLMBot
 from PIL import Image
 import bs4
 from threading import Thread
@@ -433,16 +433,17 @@ if __name__ == "__main__":
     generate_html(root, 'data/tmp/test1_layout.html')
 
     # Initialize the bot
-    bot = LMStudio("lm-studio", model="local-model")
+    # bot = LMStudio("lm-studio", model="local-model")
     # bot = Doubao("doubao_api.txt", model = "doubao-1.5-thinking-vision-pro-250428")
     # bot = Qwen("qwen_api.txt", model="qwen2.5-vl-72b-instruct")
     # bot = GPT("gpt_api.txt", model="gpt-4o")
     # bot = Gemini("gemini_api.txt", model="gemini-1.5-flash-latest")
+    bot = VLLMBot(model="Qwen/Qwen2.5-VL-7B-Instruct")
     
     # Generate code for each component
-    # code_dict = generate_code(root, img_path, bot)
+    code_dict = generate_code(root, img_path, bot)
 
-    code_dict = generate_code_parallel(root, img_path, bot)
+    # code_dict = generate_code_parallel(root, img_path, bot)
     
     # Substitute the generated code into the HTML
     code_substitution('data/tmp/test1_layout.html', code_dict)
