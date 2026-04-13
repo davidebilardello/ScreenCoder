@@ -8,7 +8,7 @@
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --time=04:00:00
-#SBATCH --account=cvcs2025
+#SBATCH --account=tesi_dbilardello
 #SBATCH --partition=all_usr_prod
 
 module unload cuda
