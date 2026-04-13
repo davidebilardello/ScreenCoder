@@ -28,6 +28,19 @@ export NCCL_P2P_DISABLE=0
 export PYTORCH_ALLOC_CONF="expandable_segments:True"
 export VLLM_LOGGING_LEVEL=WARNING
 
+export MY_CACHE_DIR="/work/tesi_dbilardello/.cache_ml"
+mkdir -p $MY_CACHE_DIR
+
+export HF_HOME="$MY_CACHE_DIR/huggingface"
+export TORCH_HOME="$MY_CACHE_DIR/torch"
+export TORCHINDUCTOR_CACHE_DIR="$MY_CACHE_DIR/torchinductor"
+export TRITON_CACHE_DIR="$MY_CACHE_DIR/triton"
+export XDG_CACHE_HOME="$MY_CACHE_DIR"
+export PIP_CACHE_DIR="$MY_CACHE_DIR/pip"
+export MPLCONFIGDIR="$MY_CACHE_DIR/matplotlib"
+export PLAYWRIGHT_BROWSERS_PATH="$MY_CACHE_DIR/playwright"
+
+
 mkdir -p sbatch_logs
 
 python main.py
