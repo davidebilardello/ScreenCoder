@@ -15,8 +15,6 @@
 module unload cuda
 module load cuda/11.8
 
-source activate screencoder
-
 source .venv/bin/activate
 
 # Variabili d'ambiente essenziali per evitare conflitti C++ / OpenMP segnalati prima
