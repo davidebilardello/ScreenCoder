@@ -442,7 +442,7 @@ class VLLMBot(Bot):
         super().__init__(key_path, patience)
         from vllm import LLM
         import threading
-        self.llm = LLM(model=model, trust_remote_code=True, max_model_len=4096)
+        self.llm = LLM(model=model, trust_remote_code=True, max_model_len=4096, tensor_parallel_size=2)
         self.name = "vllm"
         self.model = model
         self.lock = threading.Lock()

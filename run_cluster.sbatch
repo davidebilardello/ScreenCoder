@@ -5,11 +5,11 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
-#SBATCH --gres=gpu:1
+#SBATCH --mem=128G
+#SBATCH --gres=gpu:2
 #SBATCH --time=04:00:00
 #SBATCH --account=tesi_dbilardello
-#SBATCH --partition=all_usr_prod
+#SBATCH --partition=boost_usr_prod
 
 module unload cuda
 module load cuda/11.8
@@ -24,10 +24,10 @@ export USE_TORCH=1
 export USE_TF=0
 export USE_PADDLE=0
 export TRANSFORMERS_NO_ADVISORY_WARNINGS=1
-
+export NCCL_P2P_DISABLE=0
+export PYTORCH_ALLOC_CONF="expandable_segments:True"
 export VLLM_LOGGING_LEVEL=WARNING
 
 mkdir -p sbatch_logs
 
 python main.py
-
