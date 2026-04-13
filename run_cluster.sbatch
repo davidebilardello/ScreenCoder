@@ -25,10 +25,11 @@ export USE_TORCH=1
 export USE_TF=0
 export USE_PADDLE=0
 export TRANSFORMERS_NO_ADVISORY_WARNINGS=1
-export NCCL_P2P_DISABLE=0
+export NCCL_P2P_DISABLE=1
 export PYTORCH_ALLOC_CONF="expandable_segments:True"
 export VLLM_LOGGING_LEVEL=WARNING
 export VLLM_CUSTOM_ALL_REDUCE=0
+export VLLM_NO_USAGE_STATS=1
 
 export MY_CACHE_DIR="/work/tesi_dbilardello/.cache_ml"
 mkdir -p $MY_CACHE_DIR
@@ -41,7 +42,7 @@ export XDG_CACHE_HOME="$MY_CACHE_DIR"
 export PIP_CACHE_DIR="$MY_CACHE_DIR/pip"
 export MPLCONFIGDIR="$MY_CACHE_DIR/matplotlib"
 export PLAYWRIGHT_BROWSERS_PATH="$MY_CACHE_DIR/playwright"
-
+export XDG_CONFIG_HOME="$MY_CACHE_DIR/config"
 
 mkdir -p sbatch_logs
 
