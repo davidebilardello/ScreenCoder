@@ -322,7 +322,7 @@ if __name__ == "__main__":
     print(f"Input image: {image_path}")
     print(f"API path: {api_path}")
     # client = LMStudio(api_path) # Changed to LMStudio
-    client = VLLMBot(model="Qwen/Qwen2.5-VL-7B-Instruct")
+    client = VLLMBot()
     bbox_content = client.ask(PROMPT_MERGE, encode_image(image_path), False,False)
     print(f"Model response: {bbox_content}\n")
     bboxes = parse_bboxes(bbox_content, image_path)

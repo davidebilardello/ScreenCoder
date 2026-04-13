@@ -438,7 +438,7 @@ if __name__ == "__main__":
     # bot = Qwen("qwen_api.txt", model="qwen2.5-vl-72b-instruct")
     # bot = GPT("gpt_api.txt", model="gpt-4o")
     # bot = Gemini("gemini_api.txt", model="gemini-1.5-flash-latest")
-    bot = VLLMBot(model="Qwen/Qwen2.5-VL-7B-Instruct")
+    bot = VLLMBot()
     
     # Generate code for each component
     code_dict = generate_code(root, img_path, bot)
