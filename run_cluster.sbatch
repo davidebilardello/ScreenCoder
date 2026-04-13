@@ -10,6 +10,7 @@
 #SBATCH --time=04:00:00
 #SBATCH --account=tesi_dbilardello
 #SBATCH --partition=boost_usr_prod
+#SBATCH --profile=none
 
 module unload cuda
 module load cuda/11.8
@@ -27,6 +28,7 @@ export TRANSFORMERS_NO_ADVISORY_WARNINGS=1
 export NCCL_P2P_DISABLE=0
 export PYTORCH_ALLOC_CONF="expandable_segments:True"
 export VLLM_LOGGING_LEVEL=WARNING
+export VLLM_CUSTOM_ALL_REDUCE=0
 
 export MY_CACHE_DIR="/work/tesi_dbilardello/.cache_ml"
 mkdir -p $MY_CACHE_DIR
