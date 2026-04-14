@@ -11,6 +11,8 @@
 #SBATCH --account=tesi_dbilardello
 #SBATCH --partition=boost_usr_prod
 #SBATCH --profile=none
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=285039@studenti.unimore.it
 
 module unload cuda
 module load cuda/11.8
