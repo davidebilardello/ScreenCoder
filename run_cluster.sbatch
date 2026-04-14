@@ -19,7 +19,7 @@ module load cuda/11.8
 
 source .venv/bin/activate
 
-# Variabili d'ambiente essenziali per evitare conflitti C++ / OpenMP segnalati prima
+export TRITON_CACHE_DIR=/work/tesi_dbilardello/tmp/triton_cache_$(uuidgen)
 export KMP_DUPLICATE_LIB_OK=TRUE
 export USE_TORCH=1
 export USE_TF=0
