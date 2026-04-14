@@ -13,7 +13,6 @@ def run_script(script_path):
         result = subprocess.run(
             [sys.executable, script_path],
             check=True,
-            capture_output=True,
             text=True
         )
         print("Success!")
