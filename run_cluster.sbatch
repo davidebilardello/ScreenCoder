@@ -11,7 +11,7 @@
 #SBATCH --account=tesi_dbilardello
 #SBATCH --partition=boost_usr_prod
 #SBATCH --profile=none
-#SBATCH --constraint=gpu_L40S_45G
+#SBATCH --constraint=gpu_A40_45G|gpu_L40S_45G
 
 module unload cuda
 module load cuda/11.8
