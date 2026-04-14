@@ -1,17 +1,32 @@
-import argparse, asyncio, cv2, json, os, sys
+import argparse, asyncio, cv2, json, os, sys, re
 from pathlib import Path
 import numpy as np
 from playwright.async_api import async_playwright
 
 # ---------- Main logic ----------
 async def extract_bboxes_from_html(html_path: Path):
+    # 1. Clean HTML to avoid parsing issues with badly generated class attributes
+    with open(html_path, 'r', encoding='utf-8') as f:
+        html_content = f.read()
+    
+    # Fix weird class escapes and assignments like class='\"grid' gap-4\"=""
+    fixed_html_content = re.sub(r"class='\\\"(.*?)\\\"'", r'class="\1"', html_content)
+    fixed_html_content = re.sub(r"class='\\\"(.*?)[^\"]'", r'class="\1"', fixed_html_content)
+    fixed_html_content = re.sub(r'([a-zA-Z0-9-]+)\\"=""', r'\1', fixed_html_content)
+    
+    # Use a temporary file for the fixed content
+    fixed_html_path = html_path.parent / (html_path.stem + "_fixed.html")
+    with open(fixed_html_path, 'w', encoding='utf-8') as f:
+        f.write(fixed_html_content)
+
     async with async_playwright() as p:
         browser = await p.chromium.launch()
         ctx = await browser.new_context(
             viewport={"width": 1280, "height": 720},
         )
         page = await ctx.new_page()
-        await page.goto(html_path.resolve().as_uri(), wait_until="domcontentloaded")
+        # Wait until network idle to allow images to load
+        await page.goto(fixed_html_path.resolve().as_uri(), wait_until="networkidle")
 
         metrics = await page.evaluate("""
             () => {
@@ -82,6 +97,11 @@ async def extract_bboxes_from_html(html_path: Path):
             }
         """)
         await browser.close()
+
+    # Clean up temporary fixed file
+    if fixed_html_path.exists():
+        fixed_html_path.unlink()
+
     return metrics['region_bboxes'], metrics['placeholder_bboxes'], metrics['layout_width'], metrics['layout_height']
 
 
