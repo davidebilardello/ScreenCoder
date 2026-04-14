@@ -19,7 +19,6 @@ module load cuda/11.8
 
 source .venv/bin/activate
 
-export TRITON_CACHE_DIR=/work/tesi_dbilardello/tmp/triton_cache_$(uuidgen)
 export KMP_DUPLICATE_LIB_OK=TRUE
 export USE_TORCH=1
 export USE_TF=0
@@ -32,7 +31,9 @@ export VLLM_NO_USAGE_STATS=1
 
 export MY_CACHE_DIR="/work/tesi_dbilardello/.cache_ml"
 mkdir -p $MY_CACHE_DIR
+mkdir -p /work/tesi_dbilardello/tmp/triton_cache_$(uuidgen)
 
+export TRITON_CACHE_DIR=/work/tesi_dbilardello/tmp/triton_cache_$(uuidgen)
 export HF_HOME="$MY_CACHE_DIR/huggingface"
 export TORCH_HOME="$MY_CACHE_DIR/torch"
 export TORCHINDUCTOR_CACHE_DIR="$MY_CACHE_DIR/torchinductor"
