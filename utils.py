@@ -438,7 +438,7 @@ class Gemini(Bot):
         return response.text
 
 class VLLMBot(Bot):
-    def __init__(self, key_path="", patience=3, model="Qwen/Qwen2.5-VL-32B-Instruct") -> None:
+    def __init__(self, key_path="", patience=3, model="Qwen/Qwen3.5-27B") -> None:
         super().__init__(key_path, patience)
         from vllm import LLM
         import threading
