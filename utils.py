@@ -448,6 +448,8 @@ class VLLMBot(Bot):
         self.lock = threading.Lock()
         
     def ask(self, question, image_encoding=None, verbose=False, json=True):
+        import re
+        import json as json_lib
         from vllm import SamplingParams
         
         if image_encoding:
@@ -479,6 +481,48 @@ class VLLMBot(Bot):
             print("####################################")
             print("question:\n", question)
             print("####################################")
-            print("response:\n", response)
+            print("response (raw):\n", response)
             print("seed used: 42")
+        
+        # --- Post-processing: strip thinking tokens and extract JSON ---
+        # Strip <think>...</think> blocks (Qwen3.5 chain-of-thought)
+        response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
+        # Strip <|channel>thought...<channel|> blocks (other thinking formats)
+        response = re.sub(r'<\|channel>thought.*?<channel\|>', '', response, flags=re.DOTALL)
+        response = response.replace('</channel|>', '')
+        response = response.strip()
+        
+        # Try to extract JSON {"html": "..."} from the cleaned response
+        try:
+            cleaned = response
+            # Strip markdown code fences if present
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            if cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+            parsed = json_lib.loads(cleaned)
+            if "html" in parsed:
+                response = parsed["html"]
+        except (json_lib.JSONDecodeError, ValueError):
+            # Fallback: try to find a JSON object anywhere in the response
+            json_match = re.search(r'\{[^{}]*"html"\s*:\s*"', response)
+            if json_match:
+                try:
+                    # Find the start of the JSON object and try to parse from there
+                    json_start = json_match.start()
+                    parsed = json_lib.loads(response[json_start:])
+                    if "html" in parsed:
+                        response = parsed["html"]
+                except (json_lib.JSONDecodeError, ValueError):
+                    pass
+        
+        # Final cleanup: strip any remaining code fences
+        response = response.replace("```html", "").replace("```", "").strip()
+        
+        if verbose:
+            print("response (cleaned):\n", response[:500])
+        
         return response

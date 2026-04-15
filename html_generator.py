@@ -307,8 +307,11 @@ def generate_html(bbox_tree, output_file="output.html", img_path="data/test1.png
         html_content += process_bbox(child, root_width, root_height, root_x, root_y, img)
     html_content += html_template_end
 
+    # Note: Do NOT use soup.prettify() here — it mangles inline HTML attributes
+    # (e.g. Tailwind classes get split into separate broken attributes).
+    # str(soup) preserves the original attribute formatting.
     soup = bs4.BeautifulSoup(html_content, 'html.parser')
-    html_content = soup.prettify()
+    html_content = str(soup)
 
     with open(output_file, 'w') as f:
         f.write(html_content)
@@ -322,6 +325,8 @@ def code_substitution(html_file, code_dict):
         html = f.read()
     soup = bs4.BeautifulSoup(html, 'html.parser')
     for id, code in code_dict.items():
+        # Defense-in-depth: strip any remaining thinking tokens
+        # (VLLMBot.ask() should already handle this, but just in case)
         code = re.sub(r'<\|channel>thought.*?<channel\|>', '', code, flags=re.DOTALL)
         code = code.replace('</channel|>', '')
         code = re.sub(r'<think>.*?</think>', '', code, flags=re.DOTALL)
@@ -339,15 +344,26 @@ def code_substitution(html_file, code_dict):
             if "html" in parsed_json:
                 code = parsed_json["html"]
         except Exception:
-            pass
+            # Fallback: try to find JSON object anywhere in the string
+            json_match = re.search(r'\{[^{}]*"html"\s*:\s*"', code)
+            if json_match:
+                try:
+                    parsed_json = json.loads(code[json_match.start():])
+                    if "html" in parsed_json:
+                        code = parsed_json["html"]
+                except (json.JSONDecodeError, ValueError):
+                    pass
             
         code = code.replace("```html", "").replace("```", "").strip()
         div = soup.find(id=id)
         # replace the inner html of the div
         if div:
             div.append(bs4.BeautifulSoup(code, 'html.parser'))
+    # IMPORTANT: Do NOT use soup.prettify() — it mangles Tailwind class attributes
+    # by splitting multi-word class values into separate broken attributes.
+    # soup.decode(formatter="minimal") preserves the original attribute formatting.
     with open(html_file, "w") as f:
-        f.write(soup.prettify())
+        f.write(soup.decode(formatter="minimal"))
 
 def html_refinement(html_file, output_file, img_path, bot):
      """refine the html file"""
