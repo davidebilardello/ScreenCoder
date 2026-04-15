@@ -438,6 +438,14 @@ class Gemini(Bot):
         return response.text
 
 class VLLMBot(Bot):
+    # System message to enforce JSON-only output (no reasoning/explanations)
+    SYSTEM_MSG = (
+        "You are an HTML code generator. You MUST respond with ONLY a valid JSON object "
+        "containing a single key \"html\" whose value is the generated HTML string. "
+        "Do NOT include any explanations, reasoning, analysis, or markdown formatting. "
+        "Output ONLY the JSON object, nothing else."
+    )
+
     def __init__(self, key_path="", patience=3, model="Qwen/Qwen3.5-27B") -> None:
         super().__init__(key_path, patience)
         from vllm import LLM
@@ -452,9 +460,13 @@ class VLLMBot(Bot):
         import json as json_lib
         from vllm import SamplingParams
         
+        # Prepend /no_think to disable Qwen3's reasoning/thinking mode.
+        # This prevents the model from dumping chain-of-thought as plain text.
+        question_with_prefix = f"/no_think\n{question}"
+        
         if image_encoding:
             content = [
-                {"type": "text", "text": question},
+                {"type": "text", "text": question_with_prefix},
                 {
                     "type": "image_url",
                     "image_url": {
@@ -462,67 +474,151 @@ class VLLMBot(Bot):
                     },
                 },
             ]
-            messages = [{"role": "user", "content": content}]
+            messages = [
+                {"role": "system", "content": self.SYSTEM_MSG},
+                {"role": "user", "content": content},
+            ]
         else:
-            messages = [{"role": "user", "content": question}]
+            messages = [
+                {"role": "system", "content": self.SYSTEM_MSG},
+                {"role": "user", "content": question_with_prefix},
+            ]
             
         sampling_params = SamplingParams(
             temperature=0.1,
-            max_tokens=4096,
+            max_tokens=16384,  # Increased: 4096 was too low, reasoning consumed all tokens
             seed=42,
         )
         
+        # Pass enable_thinking=False via chat_template_kwargs for Qwen3 models
+        chat_kwargs = {}
+        if "qwen3" in self.model.lower() or "Qwen3" in self.model:
+            chat_kwargs["chat_template_kwargs"] = {"enable_thinking": False}
+        
         with self.lock:
-            outputs = self.llm.chat(messages=messages, sampling_params=sampling_params)
+            outputs = self.llm.chat(
+                messages=messages,
+                sampling_params=sampling_params,
+                **chat_kwargs,
+            )
             
         response = outputs[0].outputs[0].text
         
         if verbose:
             print("####################################")
-            print("question:\n", question)
+            print("question:\n", question[:200])
             print("####################################")
-            print("response (raw):\n", response)
+            print("response (raw, first 1000 chars):\n", response[:1000])
             print("seed used: 42")
         
         # --- Post-processing: strip thinking tokens and extract JSON ---
-        # Strip <think>...</think> blocks (Qwen3.5 chain-of-thought)
+        # Strip <think>...</think> blocks (if model still outputs them)
         response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
-        # Strip <|channel>thought...<channel|> blocks (other thinking formats)
+        # Strip <|channel>thought...<channel|> blocks
         response = re.sub(r'<\|channel>thought.*?<channel\|>', '', response, flags=re.DOTALL)
         response = response.replace('</channel|>', '')
         response = response.strip()
         
-        # Try to extract JSON {"html": "..."} from the cleaned response
+        # --- Extract JSON {"html": "..."} robustly ---
+        html_content = self._extract_html_from_response(response, verbose)
+        
+        if verbose:
+            print("response (cleaned, first 500 chars):\n", html_content[:500])
+        
+        return html_content
+    
+    @staticmethod
+    def _extract_html_from_response(response, verbose=False):
+        """Extract the HTML string from a model response that may contain JSON, 
+        markdown fences, or raw HTML. Handles trailing text after JSON."""
+        import re
+        import json as json_lib
+        
+        cleaned = response.strip()
+        
+        # Strip markdown code fences if wrapping the entire response
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        if cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+        
+        # Attempt 1: Direct JSON parse (ideal case — model returned clean JSON)
         try:
-            cleaned = response
-            # Strip markdown code fences if present
-            if cleaned.startswith("```json"):
-                cleaned = cleaned[7:]
-            if cleaned.startswith("```"):
-                cleaned = cleaned[3:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
-            cleaned = cleaned.strip()
             parsed = json_lib.loads(cleaned)
             if "html" in parsed:
-                response = parsed["html"]
+                return parsed["html"]
         except (json_lib.JSONDecodeError, ValueError):
-            # Fallback: try to find a JSON object anywhere in the response
-            json_match = re.search(r'\{[^{}]*"html"\s*:\s*"', response)
-            if json_match:
+            pass
+        
+        # Attempt 2: Find JSON object with "html" key anywhere in the text.
+        # Use balanced-brace counting to extract the complete JSON object,
+        # even if there's trailing text after it.
+        json_match = re.search(r'\{\s*"html"\s*:', response)
+        if json_match:
+            extracted = _extract_balanced_json(response, json_match.start())
+            if extracted:
                 try:
-                    # Find the start of the JSON object and try to parse from there
-                    json_start = json_match.start()
-                    parsed = json_lib.loads(response[json_start:])
+                    parsed = json_lib.loads(extracted)
                     if "html" in parsed:
-                        response = parsed["html"]
+                        return parsed["html"]
                 except (json_lib.JSONDecodeError, ValueError):
                     pass
         
-        # Final cleanup: strip any remaining code fences
-        response = response.replace("```html", "").replace("```", "").strip()
+        # Attempt 3: Look for ```json ... ``` blocks in the middle of text
+        json_block = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
+        if json_block:
+            try:
+                parsed = json_lib.loads(json_block.group(1))
+                if "html" in parsed:
+                    return parsed["html"]
+            except (json_lib.JSONDecodeError, ValueError):
+                pass
+        
+        # Final fallback: strip code fences and return whatever we have
+        # (this preserves backwards compat for non-JSON responses)
+        result = response.replace("```html", "").replace("```", "").strip()
         
         if verbose:
-            print("response (cleaned):\n", response[:500])
+            print(f"WARNING: Could not extract JSON from response (length={len(response)}). "
+                  f"Returning raw text (first 200 chars): {result[:200]}")
         
-        return response
+        return result
+
+
+def _extract_balanced_json(text, start_pos):
+    """Extract a complete JSON object from text starting at start_pos,
+    using balanced-brace counting to find the matching closing brace.
+    This handles cases where there's trailing text after the JSON."""
+    depth = 0
+    in_string = False
+    escape = False
+    
+    for i in range(start_pos, len(text)):
+        ch = text[i]
+        
+        if escape:
+            escape = False
+            continue
+        
+        if ch == '\\' and in_string:
+            escape = True
+            continue
+        
+        if ch == '"' and not escape:
+            in_string = not in_string
+            continue
+        
+        if in_string:
+            continue
+        
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                return text[start_pos:i + 1]
+    
+    return None  # Unbalanced braces
