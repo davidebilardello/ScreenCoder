@@ -324,7 +324,7 @@ if __name__ == "__main__":
     # client = LMStudio(api_path) # Changed to LMStudio
     client = VLLMBot()
     bbox_content = client.ask(PROMPT_MERGE, encode_image(image_path), False,False)
-    print(f"Model response: {bbox_content}\n")
+
     bboxes = parse_bboxes(bbox_content, image_path)
 
     # print("=== Starting Sequential Component Detection ===")

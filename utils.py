@@ -438,12 +438,18 @@ class Gemini(Bot):
         return response.text
 
 class VLLMBot(Bot):
-    # System message to enforce JSON-only output (no reasoning/explanations)
-    SYSTEM_MSG = (
+    # System message for HTML generation mode (json=True)
+    SYSTEM_MSG_HTML = (
         "You are an HTML code generator. You MUST respond with ONLY a valid JSON object "
         "containing a single key \"html\" whose value is the generated HTML string. "
         "Do NOT include any explanations, reasoning, analysis, or markdown formatting. "
         "Output ONLY the JSON object, nothing else."
+    )
+    # System message for non-JSON mode (json=False, e.g. bbox detection)
+    SYSTEM_MSG_GENERIC = (
+        "You are a helpful assistant. Respond directly and concisely with the requested output. "
+        "Do NOT include any reasoning, analysis, or chain-of-thought. "
+        "Output ONLY what is asked for, nothing else."
     )
 
     def __init__(self, key_path="", patience=3, model="Qwen/Qwen3.5-27B") -> None:
@@ -464,6 +470,9 @@ class VLLMBot(Bot):
         # This prevents the model from dumping chain-of-thought as plain text.
         question_with_prefix = f"/no_think\n{question}"
         
+        # Select system message based on mode
+        system_msg = self.SYSTEM_MSG_HTML if json else self.SYSTEM_MSG_GENERIC
+        
         if image_encoding:
             content = [
                 {"type": "text", "text": question_with_prefix},
@@ -475,12 +484,12 @@ class VLLMBot(Bot):
                 },
             ]
             messages = [
-                {"role": "system", "content": self.SYSTEM_MSG},
+                {"role": "system", "content": system_msg},
                 {"role": "user", "content": content},
             ]
         else:
             messages = [
-                {"role": "system", "content": self.SYSTEM_MSG},
+                {"role": "system", "content": system_msg},
                 {"role": "user", "content": question_with_prefix},
             ]
             
@@ -519,8 +528,12 @@ class VLLMBot(Bot):
         response = response.replace('</channel|>', '')
         response = response.strip()
         
-        # --- Extract JSON {"html": "..."} robustly ---
-        html_content = self._extract_html_from_response(response, verbose)
+        # --- Extract HTML from JSON (only in json=True mode) ---
+        if json:
+            html_content = self._extract_html_from_response(response, verbose)
+        else:
+            # Non-JSON mode (e.g. bbox detection): return cleaned text as-is
+            html_content = response
         
         if verbose:
             print("response (cleaned, first 500 chars):\n", html_content[:500])
