@@ -31,13 +31,15 @@ export VLLM_NO_USAGE_STATS=1
 
 export MY_CACHE_DIR="/work/tesi_dbilardello/.cache_ml"
 mkdir -p $MY_CACHE_DIR
-mkdir -p /work/tesi_dbilardello/tmp/triton_cache_$(uuidgen)
 
-export TRITON_CACHE_DIR=/work/tesi_dbilardello/tmp/triton_cache_$(uuidgen)
+# Use node-local /tmp for Triton cache to avoid NFS file-locking races
+# between tensor-parallel workers (OSError: Device or resource busy)
+export TRITON_CACHE_DIR="/tmp/triton_cache_${SLURM_JOB_ID}"
+mkdir -p "$TRITON_CACHE_DIR"
+
 export HF_HOME="$MY_CACHE_DIR/huggingface"
 export TORCH_HOME="$MY_CACHE_DIR/torch"
 export TORCHINDUCTOR_CACHE_DIR="$MY_CACHE_DIR/torchinductor"
-export TRITON_CACHE_DIR="$MY_CACHE_DIR/triton"
 export XDG_CACHE_HOME="$MY_CACHE_DIR"
 export PIP_CACHE_DIR="$MY_CACHE_DIR/pip"
 export MPLCONFIGDIR="$MY_CACHE_DIR/matplotlib"
