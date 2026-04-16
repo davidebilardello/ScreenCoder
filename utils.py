@@ -238,15 +238,20 @@ class LMStudio(Bot):
     def ask(self, question, image_encoding=None, verbose=False, json=True):
 
         if image_encoding:
-            content = [
-                {"type": "text", "text": f"<image>\n{question}"},
+            content=  {
+            "role": "user",
+            "content": [
                 {
                     "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{image_encoding}",
-                    },
+                    "image_url": {"url": f"data:image/png;base64,{image_encoding}"}
                 },
+                {
+                    "type": "text",
+                    "text": f"{question}"
+                }
             ]
+        }
+
         else:
             content = {"role": "user", "content": question}
         response = self.client.chat.completions.create(
@@ -254,7 +259,7 @@ class LMStudio(Bot):
             messages=[
                 content
             ],
-            max_tokens=4096,
+            max_tokens=12096,
             temperature=0.1,  # Aumentato da 0 a 0.1 per evitare loop
             frequency_penalty=0.3,  # Disincentiva la ripetizione della stessa parola
             seed=42,
