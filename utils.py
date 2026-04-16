@@ -504,6 +504,28 @@ class VLLMBot(Bot):
         if "qwen3" in self.model.lower() or "Qwen3" in self.model:
             chat_kwargs["chat_template_kwargs"] = {"enable_thinking": False}
         
+        # Ensure a chat template is provided if the tokenizer lacks one
+        try:
+            tokenizer = self.llm.get_tokenizer()
+            if getattr(tokenizer, "chat_template", None) is None:
+                chat_kwargs["chat_template"] = (
+                    "{% for message in messages %}"
+                    "{{'<|im_start|>' + message['role'] + '\\n'}}"
+                    "{% if message['content'] is string %}"
+                    "{{ message['content'] }}"
+                    "{% else %}"
+                    "{% for content in message['content'] %}"
+                    "{% if content['type'] == 'text' %}{{ content['text'] }}{% endif %}"
+                    "{% if content['type'] == 'image_url' %}{{ '<image>' }}{% endif %}"
+                    "{% endfor %}"
+                    "{% endif %}"
+                    "{{'<|im_end|>\\n'}}"
+                    "{% endfor %}"
+                    "{% if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{% endif %}"
+                )
+        except Exception:
+            pass
+
         with self.lock:
             outputs = self.llm.chat(
                 messages=messages,
