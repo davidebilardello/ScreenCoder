@@ -437,6 +437,33 @@ class Gemini(Bot):
 
         return response.text
 
+GEMMA4_CHAT_TEMPLATE = (
+    "{{ bos_token }}"
+    "{% for message in messages %}"
+    "{% if message.role == 'system' %}"
+    "<start_of_turn>system\n{{ message.content }}<end_of_turn>\n"
+    "{% elif message.role == 'user' %}"
+    "<start_of_turn>user\n"
+    "{% if message.content is string %}"
+    "{{ message.content }}"
+    "{% else %}"
+    "{% for part in message.content %}"
+    "{% if part.type == 'text' %}{{ part.text }}"
+    "{% elif part.type == 'image_url' %}<image>"
+    "{% elif part.type == 'image' %}<image>"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% endif %}"
+    "<end_of_turn>\n"
+    "{% elif message.role == 'assistant' or message.role == 'model' %}"
+    "<start_of_turn>model\n"
+    "{{ message.content }}<end_of_turn>\n"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}<start_of_turn>model\n{% endif %}"
+)
+
+
 class VLLMBot(Bot):
     # System message for HTML generation mode (json=True)
     SYSTEM_MSG_HTML = (
@@ -452,30 +479,41 @@ class VLLMBot(Bot):
         "Output ONLY what is asked for, nothing else."
     )
 
-    def __init__(self, key_path="", patience=3, model="Qwen/Qwen3.5-27B") -> None:
+    def __init__(self, key_path="", patience=3, model="google/gemma-4-31B") -> None:
         super().__init__(key_path, patience)
         from vllm import LLM
         import threading
-        self.llm = LLM(model=model, trust_remote_code=True, max_model_len=24000, tensor_parallel_size=4, disable_custom_all_reduce=True, gpu_memory_utilization=0.8, enforce_eager=True)
+
+        chat_template = None
+        if "gemma" in model.lower():
+            chat_template = GEMMA4_CHAT_TEMPLATE
+
+        self.llm = LLM(
+            model=model,
+            trust_remote_code=True,
+            max_model_len=8192,
+            tensor_parallel_size=4,
+            disable_custom_all_reduce=True,
+            gpu_memory_utilization=0.9,
+            enforce_eager=True,
+            chat_template=chat_template,
+            limit_mm_per_prompt={"image": 1},
+        )
         self.name = "vllm"
         self.model = model
         self.lock = threading.Lock()
-        
+
     def ask(self, question, image_encoding=None, verbose=False, json=True):
         import re
         import json as json_lib
         from vllm import SamplingParams
-        
-        # Prepend /no_think to disable Qwen3's reasoning/thinking mode.
-        # This prevents the model from dumping chain-of-thought as plain text.
-        question_with_prefix = f"/no_think\n{question}"
-        
+
         # Select system message based on mode
         system_msg = self.SYSTEM_MSG_HTML if json else self.SYSTEM_MSG_GENERIC
-        
+
         if image_encoding:
             content = [
-                {"type": "text", "text": question_with_prefix},
+                {"type": "text", "text": question},
                 {
                     "type": "image_url",
                     "image_url": {
@@ -490,87 +528,53 @@ class VLLMBot(Bot):
         else:
             messages = [
                 {"role": "system", "content": system_msg},
-                {"role": "user", "content": question_with_prefix},
+                {"role": "user", "content": question},
             ]
-            
+
         sampling_params = SamplingParams(
             temperature=0.1,
-            max_tokens=16384,  # Increased: 4096 was too low, reasoning consumed all tokens
+            max_tokens=16384,
             seed=42,
         )
-        
-        # Pass enable_thinking=False via chat_template_kwargs for Qwen3 models
-        chat_kwargs = {}
-        if "qwen3" in self.model.lower() or "Qwen3" in self.model:
-            chat_kwargs["chat_template_kwargs"] = {"enable_thinking": False}
-        
-        # Ensure a chat template is provided if the tokenizer lacks one
-        try:
-            tokenizer = self.llm.get_tokenizer()
-            if getattr(tokenizer, "chat_template", None) is None:
-                chat_kwargs["chat_template"] = (
-                    "{% for message in messages %}"
-                    "{{'<|im_start|>' + message['role'] + '\\n'}}"
-                    "{% if message['content'] is string %}"
-                    "{{ message['content'] }}"
-                    "{% else %}"
-                    "{% for content in message['content'] %}"
-                    "{% if content['type'] == 'text' %}{{ content['text'] }}{% endif %}"
-                    "{% if content['type'] == 'image_url' %}{{ '<image>' }}{% endif %}"
-                    "{% endfor %}"
-                    "{% endif %}"
-                    "{{'<|im_end|>\\n'}}"
-                    "{% endfor %}"
-                    "{% if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{% endif %}"
-                )
-        except Exception:
-            pass
 
         with self.lock:
             outputs = self.llm.chat(
                 messages=messages,
                 sampling_params=sampling_params,
-                **chat_kwargs,
             )
-            
+
         response = outputs[0].outputs[0].text
-        
+
         if verbose:
             print("####################################")
             print("question:\n", question[:200])
             print("####################################")
             print("response (raw, first 1000 chars):\n", response[:1000])
             print("seed used: 42")
-        
-        # --- Post-processing: strip thinking tokens and extract JSON ---
-        # Strip <think>...</think> blocks (if model still outputs them)
-        response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
-        # Strip <|channel>thought...<channel|> blocks
-        response = re.sub(r'<\|channel>thought.*?<channel\|>', '', response, flags=re.DOTALL)
-        response = response.replace('</channel|>', '')
+
         response = response.strip()
-        
+
         # --- Extract HTML from JSON (only in json=True mode) ---
         if json:
             html_content = self._extract_html_from_response(response, verbose)
         else:
             # Non-JSON mode (e.g. bbox detection): return cleaned text as-is
             html_content = response
-        
+
         if verbose:
             print("response (cleaned, first 500 chars):\n", html_content[:500])
-        
+
         return html_content
-    
+
     @staticmethod
     def _extract_html_from_response(response, verbose=False):
-        """Extract the HTML string from a model response that may contain JSON, 
+        """Extract the HTML string from a model response that may contain JSON,
         markdown fences, or raw HTML. Handles trailing text after JSON."""
         import re
         import json as json_lib
-        
+
         cleaned = response.strip()
-        
+
         # Strip markdown code fences if wrapping the entire response
         if cleaned.startswith("```json"):
             cleaned = cleaned[7:]
@@ -579,7 +583,7 @@ class VLLMBot(Bot):
         if cleaned.endswith("```"):
             cleaned = cleaned[:-3]
         cleaned = cleaned.strip()
-        
+
         # Attempt 1: Direct JSON parse (ideal case — model returned clean JSON)
         try:
             parsed = json_lib.loads(cleaned)
@@ -587,7 +591,7 @@ class VLLMBot(Bot):
                 return parsed["html"]
         except (json_lib.JSONDecodeError, ValueError):
             pass
-        
+
         # Attempt 2: Find JSON object with "html" key anywhere in the text.
         # Use balanced-brace counting to extract the complete JSON object,
         # even if there's trailing text after it.
@@ -601,7 +605,7 @@ class VLLMBot(Bot):
                         return parsed["html"]
                 except (json_lib.JSONDecodeError, ValueError):
                     pass
-        
+
         # Attempt 3: Look for ```json ... ``` blocks in the middle of text
         json_block = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
         if json_block:
@@ -611,15 +615,15 @@ class VLLMBot(Bot):
                     return parsed["html"]
             except (json_lib.JSONDecodeError, ValueError):
                 pass
-        
+
         # Final fallback: strip code fences and return whatever we have
         # (this preserves backwards compat for non-JSON responses)
         result = response.replace("```html", "").replace("```", "").strip()
-        
+
         if verbose:
             print(f"WARNING: Could not extract JSON from response (length={len(response)}). "
                   f"Returning raw text (first 200 chars): {result[:200]}")
-        
+
         return result
 
 
