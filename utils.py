@@ -489,7 +489,9 @@ class VLLMBot(Bot):
         "Output ONLY what is asked for, nothing else."
     )
 
-    def __init__(self, key_path="", patience=3, model="google/gemma-4-31B") -> None:
+
+    def __init__(self, key_path="", patience=3, model="google/gemma-3-27b-it") -> None:
+
         super().__init__(key_path, patience)
         from vllm import LLM
         import threading
@@ -550,6 +552,11 @@ class VLLMBot(Bot):
             max_tokens=16384,
             seed=42,
         )
+      # Pass enable_thinking=False via chat_template_kwargs for Qwen3 models
+        chat_kwargs = {}
+        if "qwen3" in self.model.lower() or "Qwen3" in self.model:
+            chat_kwargs["chat_template_kwargs"] = {"enable_thinking": False}
+        
 
         with self.lock:
             outputs = self.llm.chat(
