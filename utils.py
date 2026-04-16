@@ -488,6 +488,8 @@ class VLLMBot(Bot):
         if "gemma" in model.lower():
             chat_template = GEMMA4_CHAT_TEMPLATE
 
+        self.custom_chat_template = chat_template
+
         self.llm = LLM(
             model=model,
             trust_remote_code=True,
@@ -541,6 +543,7 @@ class VLLMBot(Bot):
             outputs = self.llm.chat(
                 messages=messages,
                 sampling_params=sampling_params,
+                chat_template=self.custom_chat_template
             )
 
         response = outputs[0].outputs[0].text
