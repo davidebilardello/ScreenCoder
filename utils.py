@@ -455,6 +455,7 @@ GEMMA4_CHAT_TEMPLATE = (
     "{% else %}"
     "{% for part in message.content %}"
     "{% if part.type == 'text' %}{{ part.text }}"
+    "{% elif part.type == 'image_url' %}<image>"
     "{% endif %}"
     "{% endfor %}"
     "{% endif %}"
@@ -518,8 +519,10 @@ class VLLMBot(Bot):
         system_msg = self.SYSTEM_MSG_HTML if json else self.SYSTEM_MSG_GENERIC
 
         if image_encoding:
+            full_text = f"<image>\n{question}"
+
             content = [
-                {"type": "text", "text": question},
+                {"type": "text", "text": full_text},
                 {
                     "type": "image_url",
                     "image_url": {
