@@ -8,6 +8,7 @@ import time
 from PIL import Image, ImageDraw
 from openai import OpenAI
 from volcenginesdkarkruntime import Ark
+from transformers import AutoTokenizer
 
 
 def encode_image(image):
@@ -490,7 +491,7 @@ class VLLMBot(Bot):
     )
 
 
-    def __init__(self, key_path="", patience=3, model="google/gemma-3-27b-it") -> None:
+    def __init__(self, key_path="", patience=3, model="google/gemma-4-31B-it") -> None:
 
         super().__init__(key_path, patience)
         from vllm import LLM
@@ -502,6 +503,7 @@ class VLLMBot(Bot):
 
         self.custom_chat_template = chat_template
 
+        self.tokenizer = AutoTokenizer.from_pretrained(model)
         self.llm = LLM(
             model=model,
             trust_remote_code=True,
@@ -510,7 +512,6 @@ class VLLMBot(Bot):
             disable_custom_all_reduce=True,
             gpu_memory_utilization=0.9,
             enforce_eager=True,
-            chat_template=chat_template,
             limit_mm_per_prompt={"image": 1},
         )
         self.name = "vllm"
@@ -526,21 +527,23 @@ class VLLMBot(Bot):
         system_msg = self.SYSTEM_MSG_HTML if json else self.SYSTEM_MSG_GENERIC
 
         if image_encoding:
-            full_text = f"<image>\n{question}"
-
-            content = [
-                {"type": "text", "text": full_text},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{image_encoding}",
-                    },
-                },
-            ]
             messages = [
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": content},
-            ]
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{image_encoding}"}
+                        },
+                        {
+                            "type": "text",
+                            "text": f"{question}"
+                        }
+                    ]
+                }
+            ],
+
         else:
             messages = [
                 {"role": "system", "content": system_msg},
@@ -564,6 +567,9 @@ class VLLMBot(Bot):
                 sampling_params=sampling_params,
                 chat_template=self.custom_chat_template
             )
+
+        prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        outputs = self.llm.generate(prompt, SamplingParams(temperature=0.0, max_tokens=1024))
 
         response = outputs[0].outputs[0].text
 
