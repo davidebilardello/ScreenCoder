@@ -448,31 +448,6 @@ class Gemini(Bot):
         return response.text
 
 
-GEMMA4_CHAT_TEMPLATE = (
-    "{{ bos_token }}"
-    "{% for message in messages %}"
-    "{% if message.role == 'system' %}"
-    "<start_of_turn>system\n{{ message.content }}<end_of_turn>\n"
-    "{% elif message.role == 'user' %}"
-    "<start_of_turn>user\n"
-    "{% if message.content is string %}"
-    "{{ message.content }}"
-    "{% else %}"
-    "{% for part in message.content %}"
-    "{% if part.type == 'text' %}{{ part.text }}"
-    "{% elif part.type == 'image_url' %}<image>"
-    "{% endif %}"
-    "{% endfor %}"
-    "{% endif %}"
-    "<end_of_turn>\n"
-    "{% elif message.role == 'assistant' or message.role == 'model' %}"
-    "<start_of_turn>model\n"
-    "{{ message.content }}<end_of_turn>\n"
-    "{% endif %}"
-    "{% endfor %}"
-    "{% if add_generation_prompt %}<start_of_turn>model\n{% endif %}"
-)
-
 
 class VLLMBot(Bot):
     # System message for HTML generation mode (json=True)
@@ -489,47 +464,20 @@ class VLLMBot(Bot):
         "Output ONLY what is asked for, nothing else."
     )
 
-
-    def __init__(self, key_path="", patience=3, model="google/gemma-3-27b-it") -> None:
-
+    def __init__(self, key_path="", patience=3, model="google/gemma-4-31B-it",
+                 base_url="http://localhost:8000/v1") -> None:
         super().__init__(key_path, patience)
-        from vllm import LLM
-        import threading
-
-        chat_template = None
-        if "gemma" in model.lower():
-            chat_template = GEMMA4_CHAT_TEMPLATE
-
-        self.custom_chat_template = chat_template
-
-        self.llm = LLM(
-            model=model,
-            trust_remote_code=True,
-            max_model_len=8192,
-            tensor_parallel_size=4,
-            disable_custom_all_reduce=True,
-            gpu_memory_utilization=0.9,
-            enforce_eager=True,
-            chat_template=chat_template,
-            limit_mm_per_prompt={"image": 1},
-        )
+        self.client = OpenAI(api_key=self.key or "EMPTY", base_url=base_url)
         self.name = "vllm"
         self.model = model
-        self.lock = threading.Lock()
 
     def ask(self, question, image_encoding=None, verbose=False, json=True):
-        import re
-        import json as json_lib
-        from vllm import SamplingParams
-
         # Select system message based on mode
         system_msg = self.SYSTEM_MSG_HTML if json else self.SYSTEM_MSG_GENERIC
 
         if image_encoding:
-            full_text = f"<image>\n{question}"
-
             content = [
-                {"type": "text", "text": full_text},
+                {"type": "text", "text": question},
                 {
                     "type": "image_url",
                     "image_url": {
@@ -537,35 +485,23 @@ class VLLMBot(Bot):
                     },
                 },
             ]
-            messages = [
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": content},
-            ]
         else:
-            messages = [
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": question},
-            ]
+            content = question
 
-        sampling_params = SamplingParams(
-            temperature=0.1,
+        messages = [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": content},
+        ]
+
+        response_obj = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
             max_tokens=16384,
+            temperature=0.1,
             seed=42,
         )
-      # Pass enable_thinking=False via chat_template_kwargs for Qwen3 models
-        chat_kwargs = {}
-        if "qwen3" in self.model.lower() or "Qwen3" in self.model:
-            chat_kwargs["chat_template_kwargs"] = {"enable_thinking": False}
-        
 
-        with self.lock:
-            outputs = self.llm.chat(
-                messages=messages,
-                sampling_params=sampling_params,
-                chat_template=self.custom_chat_template
-            )
-
-        response = outputs[0].outputs[0].text
+        response = response_obj.choices[0].message.content
 
         if verbose:
             print("####################################")
