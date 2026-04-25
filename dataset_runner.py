@@ -1,17 +1,14 @@
-"""Run the ScreenCoder pipeline over a Design2Code-style dataset.
+"""Run the ScreenCoder pipeline over the ScreenBench HuggingFace dataset.
 
-Dataset layout expected:
-    dataset_dir/
-        sample01.png
-        sample01.html   (optional, reference ground-truth)
-        sample02.png
-        ...
+Dataset source:
+    HuggingFace repo (default: leigest519/ScreenBench) providing image.zip and HTML.zip.
+    Pairs are matched by (top-level-folder, file-stem).
 
 Output layout produced:
     output_dir/
-        sample01/
+        {idx}_{stem}/
             input.png
-            reference.html       (if present in dataset)
+            reference.html       (ground-truth from HTML.zip)
             generated.html       (final pipeline output)
             rendered.png         (screenshot of generated.html)
             tmp/                 (intermediate artifacts: bboxes, UIED, mapping, ...)
@@ -21,9 +18,12 @@ import argparse
 import shutil
 import subprocess
 import sys
+import tempfile
 import traceback
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from zipfile import ZipFile
 
+from huggingface_hub import hf_hub_download
 from tqdm import tqdm
 
 from image_box_detection import render_html_to_png
@@ -106,14 +106,19 @@ def run_pipeline_for_image(image_path: Path, sample_out: Path):
         print(f"[warn] rendering failed for {sample_out.name}: {e}")
 
 
-def run_dataset(dataset_dir: Path, output_dir: Path, limit: int | None = None, skip_existing: bool = True):
-    dataset_dir = Path(dataset_dir)
+def _to_key(name: str):
+    p = PurePosixPath(name)
+    idx = p.parts[0]
+    stem = PurePosixPath(p.name).stem
+    return idx, stem
+
+
+def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None, skip_existing: bool = True):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    images = sorted(dataset_dir.glob("*.png"))
-    if limit is not None:
-        images = images[:limit]
+    img_zip = hf_hub_download(repo_id=repo_id, filename="image.zip", repo_type="dataset")
+    html_zip = hf_hub_download(repo_id=repo_id, filename="HTML.zip", repo_type="dataset")
 
     # Backup the existing data/input/test1.png (if any) so we can restore it later
     backup_input = None
@@ -123,28 +128,54 @@ def run_dataset(dataset_dir: Path, output_dir: Path, limit: int | None = None, s
 
     results = []
     try:
-        for img in tqdm(images, desc="dataset"):
-            name = img.stem
-            sample_out = output_dir / name
+        with ZipFile(img_zip) as iz, ZipFile(html_zip) as hz:
+            img_names = [n for n in iz.namelist() if not n.endswith('/')]
+            html_names = [n for n in hz.namelist() if not n.endswith('/')]
+            html_index = {_to_key(n): n for n in html_names}
 
-            if skip_existing and (sample_out / "generated.html").exists():
-                results.append((name, "skipped"))
-                continue
+            pairs = []
+            for n in img_names:
+                key = _to_key(n)
+                if key in html_index:
+                    pairs.append((key, n, html_index[key]))
+            pairs.sort(key=lambda x: (x[0][0], x[0][1]))
 
-            # Copy reference HTML if present
-            ref_html = dataset_dir / f"{name}.html"
-            sample_out.mkdir(parents=True, exist_ok=True)
-            if ref_html.exists():
-                shutil.copy2(ref_html, sample_out / "reference.html")
+            if limit is not None:
+                pairs = pairs[:limit]
 
-            try:
-                run_pipeline_for_image(img, sample_out)
-                results.append((name, "ok"))
-            except Exception as e:
-                print(f"[error] {name}: {e}")
-                traceback.print_exc()
-                (sample_out / "error.log").write_text(f"{e}\n\n{traceback.format_exc()}")
-                results.append((name, "error"))
+            print(f"paired examples: {len(pairs)}")
+
+            for (idx, stem), img_member, html_member in tqdm(pairs, desc="dataset"):
+                name = f"{idx}_{stem}"
+                sample_out = output_dir / name
+
+                if skip_existing and (sample_out / "generated.html").exists():
+                    results.append((name, "skipped"))
+                    continue
+
+                sample_out.mkdir(parents=True, exist_ok=True)
+
+                # Write reference HTML
+                (sample_out / "reference.html").write_bytes(hz.read(html_member))
+
+                # Extract image to a temp file for the pipeline
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+                    tf.write(iz.read(img_member))
+                    tmp_img_path = Path(tf.name)
+
+                try:
+                    run_pipeline_for_image(tmp_img_path, sample_out)
+                    results.append((name, "ok"))
+                except Exception as e:
+                    print(f"[error] {name}: {e}")
+                    traceback.print_exc()
+                    (sample_out / "error.log").write_text(f"{e}\n\n{traceback.format_exc()}")
+                    results.append((name, "error"))
+                finally:
+                    try:
+                        tmp_img_path.unlink()
+                    except OSError:
+                        pass
     finally:
         if backup_input is not None:
             original_test1.write_bytes(backup_input)
@@ -157,14 +188,14 @@ def run_dataset(dataset_dir: Path, output_dir: Path, limit: int | None = None, s
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Run ScreenCoder pipeline over a dataset of screenshots.")
-    ap.add_argument("--dataset", type=Path, required=True, help="Directory with {name}.png [+ optional {name}.html] files")
+    ap = argparse.ArgumentParser(description="Run ScreenCoder pipeline over the ScreenBench HF dataset.")
+    ap.add_argument("--repo-id", type=str, default="leigest519/ScreenBench", help="HuggingFace dataset repo id")
     ap.add_argument("--output", type=Path, required=True, help="Output directory for per-sample results")
     ap.add_argument("--limit", type=int, default=None, help="Process at most N samples")
     ap.add_argument("--no-skip-existing", action="store_true", help="Re-run samples even if generated.html already exists")
     args = ap.parse_args()
 
-    run_dataset(args.dataset, args.output, limit=args.limit, skip_existing=not args.no_skip_existing)
+    run_dataset(args.repo_id, args.output, limit=args.limit, skip_existing=not args.no_skip_existing)
 
 
 if __name__ == "__main__":
