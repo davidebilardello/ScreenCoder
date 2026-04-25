@@ -13,14 +13,12 @@ from transformers import AutoTokenizer
 
 def encode_image(image):
     if type(image) == str:
-        try:
-            with open(image, "rb") as image_file:
-                encoding = base64.b64encode(image_file.read()).decode('utf-8')
-        except Exception as e:
-            print(e)
-            with open(image, "r", encoding="utf-8") as image_file:
-                encoding = base64.b64encode(image_file.read()).decode('utf-8')
-        return encoding
+        img = Image.open(image)
+        if img.mode not in ("RGB", "RGBA"):
+            img = img.convert("RGB")
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
     else:
         buffered = io.BytesIO()
