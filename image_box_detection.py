@@ -233,6 +233,24 @@ def main(args):
         print(f"Success: BBox list saved to {args.json}")
 
 
+async def _render_html_to_png_async(html_path: Path, out_png: Path, viewport=(1280, 720), full_page: bool = True):
+    html_path = Path(html_path)
+    out_png = Path(out_png)
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        ctx = await browser.new_context(viewport={"width": viewport[0], "height": viewport[1]})
+        page = await ctx.new_page()
+        await page.goto(html_path.resolve().as_uri(), wait_until="networkidle")
+        await page.screenshot(path=str(out_png), full_page=full_page)
+        await browser.close()
+
+
+def render_html_to_png(html_path, out_png, viewport=(1280, 720), full_page: bool = True):
+    """Render an HTML file to a PNG screenshot using Playwright (Chromium)."""
+    asyncio.run(_render_html_to_png_async(Path(html_path), Path(out_png), viewport, full_page))
+
+
 # ---------- CLI ----------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

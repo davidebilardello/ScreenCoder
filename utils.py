@@ -491,7 +491,7 @@ class VLLMBot(Bot):
     )
 
 
-    def __init__(self, key_path="", patience=3, model="google/gemma-4-31B-it") -> None:
+    def __init__(self, key_path="", patience=3, model="Qwen/Qwen2.5-VL-3B-Instruct") -> None:
 
         super().__init__(key_path, patience)
         from vllm import LLM
