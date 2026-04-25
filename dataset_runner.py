@@ -172,9 +172,19 @@ def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None, skip_e
 
     results = []
     try:
+        def _is_real_entry(n: str) -> bool:
+            if n.endswith('/'):
+                return False
+            parts = PurePosixPath(n).parts
+            if any(p == '__MACOSX' for p in parts):
+                return False
+            if PurePosixPath(n).name.startswith('._'):
+                return False
+            return True
+
         with ZipFile(img_zip) as iz, ZipFile(html_zip) as hz:
-            img_names = [n for n in iz.namelist() if not n.endswith('/')]
-            html_names = [n for n in hz.namelist() if not n.endswith('/')]
+            img_names = [n for n in iz.namelist() if _is_real_entry(n)]
+            html_names = [n for n in hz.namelist() if _is_real_entry(n)]
             html_index = {_to_key(n): n for n in html_names}
 
             pairs = []
