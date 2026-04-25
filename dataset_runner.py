@@ -33,7 +33,7 @@ from image_box_detection import render_html_to_png
 
 def _normalize_to_png(src: Path, dst: Path):
     """Save `src` as a valid PNG at `dst`, regardless of original format.
-    Falls back to cv2 if PIL cannot identify the file."""
+    Tries PIL, cv2, imageio, and SVG rasterization in turn."""
     try:
         with Image.open(src) as img:
             if img.mode not in ("RGB", "RGBA"):
@@ -44,10 +44,33 @@ def _normalize_to_png(src: Path, dst: Path):
         pass
 
     arr = cv2.imread(str(src), cv2.IMREAD_UNCHANGED)
-    if arr is None:
-        raise ValueError(f"Could not decode image: {src}")
-    if not cv2.imwrite(str(dst), arr):
-        raise ValueError(f"Failed to write PNG to: {dst}")
+    if arr is not None and cv2.imwrite(str(dst), arr):
+        return
+
+    head = src.read_bytes()[:4096]
+    head_lc = head.lstrip().lower()
+    if head_lc.startswith(b"<?xml") or head_lc.startswith(b"<svg"):
+        try:
+            import cairosvg
+            cairosvg.svg2png(bytestring=src.read_bytes(), write_to=str(dst))
+            return
+        except ImportError:
+            raise ValueError(
+                f"Image {src} is SVG; install cairosvg to rasterize it."
+            )
+
+    try:
+        import imageio.v3 as iio
+        arr = iio.imread(str(src))
+        Image.fromarray(arr).save(dst, format="PNG")
+        return
+    except Exception:
+        pass
+
+    magic = head[:16]
+    raise ValueError(
+        f"Could not decode image: {src} (magic bytes: {magic!r})"
+    )
 
 REPO_ROOT = Path(__file__).resolve().parent
 DATA_INPUT = REPO_ROOT / "data" / "input"
