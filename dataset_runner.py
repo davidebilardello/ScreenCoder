@@ -185,13 +185,25 @@ def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None, skip_e
         with ZipFile(img_zip) as iz, ZipFile(html_zip) as hz:
             img_names = [n for n in iz.namelist() if _is_real_entry(n)]
             html_names = [n for n in hz.namelist() if _is_real_entry(n)]
-            html_index = {_to_key(n): n for n in html_names}
 
+            print(f"image.zip entries: {len(img_names)} (e.g. {img_names[:3]})")
+            print(f"HTML.zip entries:  {len(html_names)} (e.g. {html_names[:3]})")
+
+            html_index = {_to_key(n): n for n in html_names}
             pairs = []
             for n in img_names:
                 key = _to_key(n)
                 if key in html_index:
                     pairs.append((key, n, html_index[key]))
+
+            if not pairs:
+                print("[warn] no (folder, stem) matches; falling back to stem-only pairing")
+                html_by_stem = {PurePosixPath(n).stem: n for n in html_names}
+                for n in img_names:
+                    stem = PurePosixPath(n).stem
+                    if stem in html_by_stem:
+                        pairs.append(((stem, stem), n, html_by_stem[stem]))
+
             pairs.sort(key=lambda x: (x[0][0], x[0][1]))
 
             if limit is not None:
