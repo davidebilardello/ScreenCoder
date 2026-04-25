@@ -340,19 +340,26 @@ def code_substitution(html_file, code_dict):
                 cleaned_code = cleaned_code[3:]
             if cleaned_code.endswith("```"):
                 cleaned_code = cleaned_code[:-3]
-            parsed_json = json.loads(cleaned_code.strip())
+            parsed_json = json.loads(cleaned_code.strip(), strict=False)
             if "html" in parsed_json:
                 code = parsed_json["html"]
         except Exception:
-            # Fallback: try to find JSON object anywhere in the string
-            json_match = re.search(r'\{[^{}]*"html"\s*:\s*"', code)
+            # Fallback 1: find JSON object anywhere, parse with strict=False
+            json_match = re.search(r'\{\s*"html"\s*:\s*"', code)
             if json_match:
                 try:
-                    parsed_json = json.loads(code[json_match.start():])
+                    parsed_json = json.loads(code[json_match.start():], strict=False)
                     if "html" in parsed_json:
                         code = parsed_json["html"]
                 except (json.JSONDecodeError, ValueError):
-                    pass
+                    # Fallback 2: regex-extract the html string value directly
+                    m = re.search(
+                        r'"html"\s*:\s*"(.*?)"\s*\}\s*\Z',
+                        code[json_match.start():],
+                        flags=re.DOTALL,
+                    )
+                    if m:
+                        code = m.group(1).encode().decode('unicode_escape', errors='replace')
             
         code = code.replace("```html", "").replace("```", "").strip()
         div = soup.find(id=id)
@@ -386,7 +393,7 @@ def html_refinement(html_file, output_file, img_path, bot):
                  cleaned_ref = cleaned_ref[3:]
              if cleaned_ref.endswith("```"):
                  cleaned_ref = cleaned_ref[:-3]
-             parsed_ref = json.loads(cleaned_ref.strip())
+             parsed_ref = json.loads(cleaned_ref.strip(), strict=False)
              if "html" in parsed_ref:
                  refined_html = parsed_ref["html"]
          except Exception:

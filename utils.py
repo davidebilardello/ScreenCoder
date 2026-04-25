@@ -612,7 +612,7 @@ class VLLMBot(Bot):
 
         # Attempt 1: Direct JSON parse (ideal case — model returned clean JSON)
         try:
-            parsed = json_lib.loads(cleaned)
+            parsed = json_lib.loads(cleaned, strict=False)
             if "html" in parsed:
                 return parsed["html"]
         except (json_lib.JSONDecodeError, ValueError):
@@ -626,7 +626,7 @@ class VLLMBot(Bot):
             extracted = _extract_balanced_json(response, json_match.start())
             if extracted:
                 try:
-                    parsed = json_lib.loads(extracted)
+                    parsed = json_lib.loads(extracted, strict=False)
                     if "html" in parsed:
                         return parsed["html"]
                 except (json_lib.JSONDecodeError, ValueError):
@@ -636,7 +636,7 @@ class VLLMBot(Bot):
         json_block = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
         if json_block:
             try:
-                parsed = json_lib.loads(json_block.group(1))
+                parsed = json_lib.loads(json_block.group(1), strict=False)
                 if "html" in parsed:
                     return parsed["html"]
             except (json_lib.JSONDecodeError, ValueError):
