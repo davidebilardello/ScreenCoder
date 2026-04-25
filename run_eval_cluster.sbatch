@@ -49,18 +49,18 @@ export XDG_CONFIG_HOME="$MY_CACHE_DIR/config"
 mkdir -p sbatch_logs
 
 # ---- Configurable paths ----
-DATASET_DIR="${DATASET_DIR:-data/dataset}"
+REPO_ID="${REPO_ID:-leigest519/ScreenBench}"
 RUN_DIR="${RUN_DIR:-data/runs/run_${SLURM_JOB_ID}}"
 LIMIT_FLAG=""
 if [ -n "${LIMIT}" ]; then
     LIMIT_FLAG="--limit ${LIMIT}"
 fi
 
-echo "Dataset: $DATASET_DIR"
+echo "Repo:    $REPO_ID"
 echo "Run dir: $RUN_DIR"
 
 # 1) Generate HTML for every screenshot in the dataset
-python dataset_runner.py --dataset "$DATASET_DIR" --output "$RUN_DIR" $LIMIT_FLAG
+python dataset_runner.py --repo-id "$REPO_ID" --output "$RUN_DIR" $LIMIT_FLAG
 
 # 2) Compute Design2Code-style metrics on the produced run
 python evaluation.py --run "$RUN_DIR"
