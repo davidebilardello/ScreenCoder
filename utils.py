@@ -508,7 +508,7 @@ class VLLMBot(Bot):
             model=model,
             trust_remote_code=True,
             max_model_len=8192,
-            tensor_parallel_size=4,
+            tensor_parallel_size=1,
             disable_custom_all_reduce=True,
             gpu_memory_utilization=0.9,
             enforce_eager=True,
