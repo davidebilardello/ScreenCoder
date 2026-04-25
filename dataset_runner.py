@@ -189,7 +189,7 @@ def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None, skip_e
 
 def main():
     ap = argparse.ArgumentParser(description="Run ScreenCoder pipeline over the ScreenBench HF dataset.")
-    ap.add_argument("--repo-id", type=str, default="leigest519/ScreenBench", help="HuggingFace dataset repo id")
+    ap.add_argument("--repo-id", type=str, default="Leigest/ScreenCoder", help="HuggingFace dataset repo id")
     ap.add_argument("--output", type=Path, required=True, help="Output directory for per-sample results")
     ap.add_argument("--limit", type=int, default=None, help="Process at most N samples")
     ap.add_argument("--no-skip-existing", action="store_true", help="Re-run samples even if generated.html already exists")

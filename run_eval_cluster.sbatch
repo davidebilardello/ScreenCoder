@@ -49,7 +49,7 @@ export XDG_CONFIG_HOME="$MY_CACHE_DIR/config"
 mkdir -p sbatch_logs
 
 # ---- Configurable paths ----
-REPO_ID="${REPO_ID:-leigest519/ScreenBench}"
+REPO_ID="${REPO_ID:-Leigest/ScreenCoder}"
 RUN_DIR="${RUN_DIR:-data/runs/run_${SLURM_JOB_ID}}"
 LIMIT_FLAG=""
 if [ -n "${LIMIT}" ]; then
