@@ -23,10 +23,31 @@ import traceback
 from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
+import cv2
 from huggingface_hub import hf_hub_download
+from PIL import Image, UnidentifiedImageError
 from tqdm import tqdm
 
 from image_box_detection import render_html_to_png
+
+
+def _normalize_to_png(src: Path, dst: Path):
+    """Save `src` as a valid PNG at `dst`, regardless of original format.
+    Falls back to cv2 if PIL cannot identify the file."""
+    try:
+        with Image.open(src) as img:
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGB")
+            img.save(dst, format="PNG")
+            return
+    except (UnidentifiedImageError, OSError):
+        pass
+
+    arr = cv2.imread(str(src), cv2.IMREAD_UNCHANGED)
+    if arr is None:
+        raise ValueError(f"Could not decode image: {src}")
+    if not cv2.imwrite(str(dst), arr):
+        raise ValueError(f"Failed to write PNG to: {dst}")
 
 REPO_ROOT = Path(__file__).resolve().parent
 DATA_INPUT = REPO_ROOT / "data" / "input"
@@ -67,7 +88,7 @@ def run_pipeline_for_image(image_path: Path, sample_out: Path):
     # Prepare input slot: the pipeline reads from data/input/test1.png
     DATA_INPUT.mkdir(parents=True, exist_ok=True)
     target_input = DATA_INPUT / f"{PIPELINE_STEM}.png"
-    shutil.copy2(image_path, target_input)
+    _normalize_to_png(image_path, target_input)
 
     # Clean intermediate / output dirs for this run
     _clear_dir(DATA_TMP)
