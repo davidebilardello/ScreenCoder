@@ -532,7 +532,7 @@ class VLLMRemote(Bot):
         kwargs = dict(
             model=self.model,
             messages=messages,
-            max_tokens=16384,
+            max_tokens=8192,
             temperature=0.1,
             seed=42,
         )
