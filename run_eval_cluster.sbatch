@@ -56,11 +56,51 @@ if [ -n "${LIMIT}" ]; then
     LIMIT_FLAG="--limit ${LIMIT}"
 fi
 
+VLLM_MODEL="${VLLM_MODEL:-Qwen/Qwen2.5-VL-3B-Instruct}"
+VLLM_PORT="${VLLM_PORT:-8000}"
+VLLM_URL="http://127.0.0.1:${VLLM_PORT}/v1"
+WORKERS="${WORKERS:-8}"
+
 echo "Repo:    $REPO_ID"
 echo "Run dir: $RUN_DIR"
+echo "Model:   $VLLM_MODEL"
+echo "Workers: $WORKERS"
 
-# 1) Generate HTML for every screenshot in the dataset
-python dataset_runner.py --repo-id "$REPO_ID" --output "$RUN_DIR" $LIMIT_FLAG
+# 1) Start vllm OpenAI server in background (loaded once, reused for all samples)
+mkdir -p "$RUN_DIR"
+VLLM_LOG="$RUN_DIR/vllm_server.log"
+echo "Starting vllm server on port $VLLM_PORT (log: $VLLM_LOG)"
+python -m vllm.entrypoints.openai.api_server \
+    --model "$VLLM_MODEL" \
+    --port "$VLLM_PORT" \
+    --gpu-memory-utilization 0.9 \
+    --max-model-len 8192 \
+    --tensor-parallel-size 1 \
+    --enforce-eager \
+    --limit-mm-per-prompt '{"image": 1}' \
+    --trust-remote-code \
+    > "$VLLM_LOG" 2>&1 &
+VLLM_PID=$!
+echo "vllm server PID: $VLLM_PID"
 
-# 2) Compute Design2Code-style metrics on the produced run
+# Make sure we kill the server on exit (success, error, or signal)
+cleanup() {
+    if kill -0 "$VLLM_PID" 2>/dev/null; then
+        echo "Stopping vllm server (PID $VLLM_PID)"
+        kill "$VLLM_PID" 2>/dev/null || true
+        wait "$VLLM_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT INT TERM
+
+# 2) Generate HTML for every screenshot (waits internally for the server to be ready)
+python dataset_runner.py \
+    --repo-id "$REPO_ID" \
+    --output "$RUN_DIR" \
+    --workers "$WORKERS" \
+    --vllm-url "$VLLM_URL" \
+    --vllm-model "$VLLM_MODEL" \
+    $LIMIT_FLAG
+
+# 3) Compute Design2Code-style metrics on the produced run
 python evaluation.py --run "$RUN_DIR"

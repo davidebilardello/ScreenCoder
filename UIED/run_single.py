@@ -61,9 +61,14 @@ if __name__ == '__main__':
     key_params = {'min-grad':10, 'ffl-block':5, 'min-ele-area':50,
                   'merge-contained-ele':True, 'merge-line-to-paragraph':False, 'remove-bar':True}
 
-    # set input image path
-    input_path_img = 'data/input/test1.png'
-    output_root = 'data/tmp'
+    # set input image path (overridable via env vars for parallel runs)
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+    from pipeline_paths import input_dir, tmp_dir, PIPELINE_STEM
+
+    input_path_img = str(input_dir() / f"{PIPELINE_STEM}.png")
+    output_root = str(tmp_dir())
 
     resized_height = resize_height_by_longest_edge(input_path_img, resize_length=800)
     color_tips()

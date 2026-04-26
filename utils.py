@@ -473,20 +473,101 @@ GEMMA4_CHAT_TEMPLATE = (
 )
 
 
+_SYSTEM_MSG_HTML = (
+    "You are an HTML code generator. You MUST respond with ONLY a valid JSON object "
+    "containing a single key \"html\" whose value is the generated HTML string. "
+    "Do NOT include any explanations, reasoning, analysis, or markdown formatting. "
+    "Output ONLY the JSON object, nothing else."
+)
+_SYSTEM_MSG_GENERIC = (
+    "You are a helpful assistant. Respond directly and concisely with the requested output. "
+    "Do NOT include any reasoning, analysis, or chain-of-thought. "
+    "Output ONLY what is asked for, nothing else."
+)
+
+
+class VLLMRemote(Bot):
+    """OpenAI-compatible client for an externally-running vllm serve instance.
+    Drop-in replacement for VLLMBot: same .ask() signature, no local model load."""
+
+    SYSTEM_MSG_HTML = _SYSTEM_MSG_HTML
+    SYSTEM_MSG_GENERIC = _SYSTEM_MSG_GENERIC
+
+    def __init__(self, key_path="", patience=3,
+                 model=None, base_url=None, api_key=None) -> None:
+        super().__init__(key_path or "EMPTY", patience)
+        self.base_url = base_url or os.environ.get(
+            "SCREENCODER_VLLM_URL", "http://localhost:8000/v1"
+        )
+        self.model = model or os.environ.get(
+            "SCREENCODER_VLLM_MODEL", "Qwen/Qwen2.5-VL-3B-Instruct"
+        )
+        api_key = api_key or os.environ.get("SCREENCODER_VLLM_KEY", "EMPTY")
+        self.client = OpenAI(base_url=self.base_url, api_key=api_key)
+        self.name = "vllm-remote"
+
+    def ask(self, question, image_encoding=None, verbose=False, json=True):
+        system_msg = self.SYSTEM_MSG_HTML if json else self.SYSTEM_MSG_GENERIC
+
+        if image_encoding:
+            messages = [
+                {"role": "system", "content": system_msg},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{image_encoding}"},
+                        },
+                        {"type": "text", "text": question},
+                    ],
+                },
+            ]
+        else:
+            messages = [
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": question},
+            ]
+
+        kwargs = dict(
+            model=self.model,
+            messages=messages,
+            max_tokens=16384,
+            temperature=0.1,
+            seed=42,
+        )
+        if json:
+            kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "html_out",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"html": {"type": "string"}},
+                        "required": ["html"],
+                    },
+                },
+            }
+
+        response = self.client.chat.completions.create(**kwargs)
+        text = response.choices[0].message.content or ""
+
+        if verbose:
+            print("####################################")
+            print("question:\n", question[:200])
+            print("####################################")
+            print("response (raw, first 1000 chars):\n", text[:1000])
+
+        if json:
+            return VLLMBot._extract_html_from_response(text, verbose=verbose)
+        return text.strip()
+
+
 class VLLMBot(Bot):
     # System message for HTML generation mode (json=True)
-    SYSTEM_MSG_HTML = (
-        "You are an HTML code generator. You MUST respond with ONLY a valid JSON object "
-        "containing a single key \"html\" whose value is the generated HTML string. "
-        "Do NOT include any explanations, reasoning, analysis, or markdown formatting. "
-        "Output ONLY the JSON object, nothing else."
-    )
+    SYSTEM_MSG_HTML = _SYSTEM_MSG_HTML
     # System message for non-JSON mode (json=False, e.g. bbox detection)
-    SYSTEM_MSG_GENERIC = (
-        "You are a helpful assistant. Respond directly and concisely with the requested output. "
-        "Do NOT include any reasoning, analysis, or chain-of-thought. "
-        "Output ONLY what is asked for, nothing else."
-    )
+    SYSTEM_MSG_GENERIC = _SYSTEM_MSG_GENERIC
 
 
     def __init__(self, key_path="", patience=3, model="Qwen/Qwen2.5-VL-3B-Instruct") -> None:

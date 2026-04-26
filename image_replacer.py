@@ -5,6 +5,8 @@ from bs4 import BeautifulSoup
 import cv2
 import re
 
+from pipeline_paths import input_dir, tmp_dir, output_dir, PIPELINE_STEM
+
 def main(args):
     # --- Phase 1: Crop and Save All Images First ---
     
@@ -130,11 +132,11 @@ if __name__ == "__main__":
     parser.add_argument("--output-html", type=Path, required=False, help="Path to save the final, modified HTML file.")
     
     parser.set_defaults(
-        mapping=Path('data/tmp/mapping_full_test1.json'),
-        uied=Path('data/tmp/ip/test1.json'),
-        original_image=Path('data/input/test1.png'),
-        gray_html=Path('data/tmp/test1_layout.html'),
-        output_html=Path('data/output/test1_layout_final.html')
+        mapping=tmp_dir() / f"mapping_full_{PIPELINE_STEM}.json",
+        uied=tmp_dir() / "ip" / f"{PIPELINE_STEM}.json",
+        original_image=input_dir() / f"{PIPELINE_STEM}.png",
+        gray_html=tmp_dir() / f"{PIPELINE_STEM}_layout.html",
+        output_html=output_dir() / f"{PIPELINE_STEM}_layout_final.html",
     )
 
     args = parser.parse_args()

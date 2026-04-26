@@ -10,6 +10,8 @@ from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
 import sys
 
+from pipeline_paths import input_dir, tmp_dir, PIPELINE_STEM
+
 CIOU_STRICT = -0.9      # Min CIoU score for a valid one-to-one mapping
 FILTER_MIN_WH = 10     # UIED filter: ignore boxes smaller than this
 
@@ -306,9 +308,9 @@ def main(args):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--gray", type=Path, default=Path("data/tmp/test1_bboxes.json"), help="Path to the JSON file with gray placeholder boxes.")
-    ap.add_argument("--uied", type=Path, default=Path("data/tmp/ip/test1.json"), help="Path to the JSON file with UIED detected boxes.")
-    ap.add_argument("--out", default=Path("data/tmp/mapping_full_test1.json"), type=Path, help="Output path for the mapping JSON file.")
-    ap.add_argument("--debug", type=Path, default=Path("data/tmp/overlay_test_test1.png"), help="Output path for the debug overlay PNG.")
-    ap.add_argument("--debug-src", type=Path, default=Path("data/input/test1.png"), help="Path to the original screenshot for the debug overlay background.")
+    ap.add_argument("--gray", type=Path, default=tmp_dir() / f"{PIPELINE_STEM}_bboxes.json", help="Path to the JSON file with gray placeholder boxes.")
+    ap.add_argument("--uied", type=Path, default=tmp_dir() / "ip" / f"{PIPELINE_STEM}.json", help="Path to the JSON file with UIED detected boxes.")
+    ap.add_argument("--out", default=tmp_dir() / f"mapping_full_{PIPELINE_STEM}.json", type=Path, help="Output path for the mapping JSON file.")
+    ap.add_argument("--debug", type=Path, default=tmp_dir() / f"overlay_test_{PIPELINE_STEM}.png", help="Output path for the debug overlay PNG.")
+    ap.add_argument("--debug-src", type=Path, default=input_dir() / f"{PIPELINE_STEM}.png", help="Path to the original screenshot for the debug overlay background.")
     main(ap.parse_args())

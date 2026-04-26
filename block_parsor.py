@@ -1,9 +1,10 @@
 import os
 import cv2
 import json
-from utils import Doubao, Qwen, GPT, Gemini, LMStudio, VLLMBot, encode_image, image_mask
+from utils import Doubao, Qwen, GPT, Gemini, LMStudio, VLLMBot, VLLMRemote, encode_image, image_mask
+from pipeline_paths import input_dir, tmp_dir, PIPELINE_STEM, use_remote_vllm
 
-DEFAULT_IMAGE_PATH = "data/input/test1.png"
+DEFAULT_IMAGE_PATH = str(input_dir() / f"{PIPELINE_STEM}.png")
 DEFAULT_API_PATH = "lm-studio"  # Changed to lm-studio
 
 # We provide prompts in both Chinese and English.
@@ -197,12 +198,12 @@ def draw_bboxes(image_path: str, bboxes: dict[str, tuple[int, int, int, int]]) -
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
     
     # Output directory
-    output_dir = "data/tmp"
-    os.makedirs(output_dir, exist_ok=True)
-    
+    out_dir = str(tmp_dir())
+    os.makedirs(out_dir, exist_ok=True)
+
     # Get the original filename without path
     original_filename = os.path.basename(image_path)
-    output_path = os.path.join(output_dir, os.path.splitext(original_filename)[0] + "_with_bboxes.png")
+    output_path = os.path.join(out_dir, os.path.splitext(original_filename)[0] + "_with_bboxes.png")
     
     if cv2.imwrite(output_path, image):
         print(f"Successfully saved annotated image: {output_path}")
@@ -213,11 +214,11 @@ def draw_bboxes(image_path: str, bboxes: dict[str, tuple[int, int, int, int]]) -
 def save_bboxes_to_json(bboxes: dict[str, tuple[int, int, int, int]], image_path: str) -> str:
     """Save bounding boxes information to a JSON file"""
     # Output directory
-    output_dir = "data/tmp"
-    os.makedirs(output_dir, exist_ok=True)
-    
+    out_dir = str(tmp_dir())
+    os.makedirs(out_dir, exist_ok=True)
+
     original_filename = os.path.basename(image_path)
-    json_path = os.path.join(output_dir, os.path.splitext(original_filename)[0] + "_bboxes.json")
+    json_path = os.path.join(out_dir, os.path.splitext(original_filename)[0] + "_bboxes.json")
     
     bboxes_dict = {k: list(v) for k, v in bboxes.items()}
     
@@ -322,8 +323,8 @@ if __name__ == "__main__":
     print(f"Input image: {image_path}")
     print(f"API path: {api_path}")
     # client = LMStudio(api_path) # Changed to LMStudio
-    client = VLLMBot()
-    bbox_content = client.ask(PROMPT_MERGE, encode_image(image_path), False,False)
+    client = VLLMRemote() if use_remote_vllm() else VLLMBot()
+    bbox_content = client.ask(PROMPT_MERGE, encode_image(image_path), False, False)
 
     bboxes = parse_bboxes(bbox_content, image_path)
 

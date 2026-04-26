@@ -1,4 +1,5 @@
-from utils import encode_image, Doubao, Qwen, GPT, Gemini, LMStudio, VLLMBot
+from utils import encode_image, Doubao, Qwen, GPT, Gemini, LMStudio, VLLMBot, VLLMRemote
+from pipeline_paths import input_dir, tmp_dir, PIPELINE_STEM, use_remote_vllm
 from PIL import Image
 import bs4
 import json
@@ -405,12 +406,14 @@ if __name__ == "__main__":
     import json
     import time
     from PIL import Image
-    
+
+    bboxes_json = str(tmp_dir() / f"{PIPELINE_STEM}_bboxes.json")
+    img_path = str(input_dir() / f"{PIPELINE_STEM}.png")
+    layout_html = str(tmp_dir() / f"{PIPELINE_STEM}_layout.html")
+
     # Load bboxes from block_parsing.py output
-    boxes_data = json.load(open("data/tmp/test1_bboxes.json"))
+    boxes_data = json.load(open(bboxes_json))
 
-
-    img_path = "data/input/test1.png"
     with Image.open(img_path) as img:
         width, height = img.size
     
@@ -447,7 +450,7 @@ if __name__ == "__main__":
 
     # print(root)
     # Generate initial HTML layout
-    generate_html(root, 'data/tmp/test1_layout.html')
+    generate_html(root, layout_html)
 
     # Initialize the bot
     # bot = LMStudio("lm-studio", model="local-model")
@@ -455,15 +458,13 @@ if __name__ == "__main__":
     # bot = Qwen("qwen_api.txt", model="qwen2.5-vl-72b-instruct")
     # bot = GPT("gpt_api.txt", model="gpt-4o")
     # bot = Gemini("gemini_api.txt", model="gemini-1.5-flash-latest")
-    bot = VLLMBot()
-    
-    # Generate code for each component
-    code_dict = generate_code(root, img_path, bot)
+    bot = VLLMRemote() if use_remote_vllm() else VLLMBot()
 
-    # code_dict = generate_code_parallel(root, img_path, bot)
-    
+    # Generate code for each component (parallel: one HTTP call per region)
+    code_dict = generate_code_parallel(root, img_path, bot)
+
     # Substitute the generated code into the HTML
-    code_substitution('data/tmp/test1_layout.html', code_dict)
+    code_substitution(layout_html, code_dict)
 
     # Refine the html file
-    #html_refinement('data/tmp/test1_layout.html', 'data/tmp/test1_layout_refined.html', img_path, bot)
+    #html_refinement(layout_html, str(tmp_dir() / f"{PIPELINE_STEM}_layout_refined.html"), img_path, bot)

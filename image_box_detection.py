@@ -3,6 +3,8 @@ from pathlib import Path
 import numpy as np
 from playwright.async_api import async_playwright
 
+from pipeline_paths import input_dir, tmp_dir, PIPELINE_STEM
+
 # ---------- Main logic ----------
 async def extract_bboxes_from_html(html_path: Path):
     # 1. Clean HTML to avoid parsing issues with badly generated class attributes
@@ -256,13 +258,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Draw BBoxes parsed from HTML on the original screenshot"
     )
-    parser.add_argument("--html", required=False, type=Path, default=Path("data/tmp/test1_layout.html"),
+    parser.add_argument("--html", required=False, type=Path,
+                        default=tmp_dir() / f"{PIPELINE_STEM}_layout.html",
                         help="Generated HTML file (with gray placeholder)")
-    parser.add_argument("--screenshot", required=False, type=Path, default=Path("data/input/test1.png"),
+    parser.add_argument("--screenshot", required=False, type=Path,
+                        default=input_dir() / f"{PIPELINE_STEM}.png",
                         help="Original UI screenshot (with real thumbnails)")
-    parser.add_argument("--out", default=Path("data/tmp"), type=Path,
+    parser.add_argument("--out", default=tmp_dir(), type=Path,
                         help="Output directory (save debug_gray_bboxes_test1.png)")
-    parser.add_argument("--json", type=Path, default=Path("data/tmp/test1_bboxes.json"),
+    parser.add_argument("--json", type=Path,
+                        default=tmp_dir() / f"{PIPELINE_STEM}_bboxes.json",
                         help="If provided, write BBox list to JSON file")
     args = parser.parse_args()
     main(args)
