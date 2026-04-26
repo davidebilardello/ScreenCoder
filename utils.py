@@ -642,6 +642,28 @@ class VLLMBot(Bot):
             except (json_lib.JSONDecodeError, ValueError):
                 pass
 
+        # Attempt 4: regex-extract the html string value, tolerating
+        # unescaped quotes / control chars inside the html string
+        m_start = re.search(r'"html"\s*:\s*"', response)
+        if m_start:
+            start = m_start.end()
+            tail = response[start:]
+            m_end = re.search(r'"\s*\}\s*\Z', tail.strip())
+            if m_end:
+                content = tail.strip()[:m_end.start()]
+            else:
+                last_q = tail.rfind('"')
+                content = tail[:last_q] if last_q > 0 else tail
+            content = content.replace('\\\\', '\x00')
+            content = (content
+                       .replace('\\n', '\n')
+                       .replace('\\t', '\t')
+                       .replace('\\r', '\r')
+                       .replace('\\"', '"')
+                       .replace('\\/', '/'))
+            content = content.replace('\x00', '\\')
+            return content
+
         # Final fallback: strip code fences and return whatever we have
         # (this preserves backwards compat for non-JSON responses)
         result = response.replace("```html", "").replace("```", "").strip()

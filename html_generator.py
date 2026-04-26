@@ -1,8 +1,56 @@
 from utils import encode_image, Doubao, Qwen, GPT, Gemini, LMStudio, VLLMBot
 from PIL import Image
 import bs4
+import json
+import re
 from threading import Thread
 import time
+
+
+def extract_html_payload(text: str) -> str:
+    """Extract HTML from a model response that may wrap it in JSON, code fences,
+    or just emit raw HTML. Tolerates unescaped quotes / control chars inside
+    the html string (which break json.loads even with strict=False)."""
+    if not isinstance(text, str):
+        return text or ""
+
+    s = text.strip()
+
+    s = re.sub(r'<\|channel>thought.*?<channel\|>', '', s, flags=re.DOTALL)
+    s = s.replace('</channel|>', '')
+    s = re.sub(r'<think>.*?</think>', '', s, flags=re.DOTALL)
+    s = s.strip()
+
+    s = re.sub(r'^```(?:json|html)?\s*\n?', '', s)
+    s = re.sub(r'\n?\s*```\s*$', '', s)
+    s = re.sub(r'^json\s*\n', '', s, flags=re.IGNORECASE)
+    s = s.strip()
+
+    try:
+        parsed = json.loads(s, strict=False)
+        if isinstance(parsed, dict) and "html" in parsed:
+            return parsed["html"]
+    except Exception:
+        pass
+
+    m_start = re.search(r'"html"\s*:\s*"', s)
+    if m_start:
+        start = m_start.end()
+        tail = s[start:]
+        m_end = re.search(r'"\s*\}\s*\Z', tail)
+        end = m_end.start() if m_end else (tail.rfind('"') if tail.rfind('"') > 0 else len(tail))
+        content = tail[:end]
+        content = content.replace('\\\\', '\x00')
+        content = (content
+                   .replace('\\n', '\n')
+                   .replace('\\t', '\t')
+                   .replace('\\r', '\r')
+                   .replace('\\"', '"')
+                   .replace('\\/', '/'))
+        content = content.replace('\x00', '\\')
+        return content
+
+    return s.replace('```html', '').replace('```', '').strip()
 
 # user instruction for each component
 user_instruction = {
@@ -319,49 +367,11 @@ def generate_html(bbox_tree, output_file="output.html", img_path="data/test1.png
 # Substitute the code in the html file
 def code_substitution(html_file, code_dict):
     """substitute the code in the html file"""
-    import re
-    import json
     with open(html_file, "r") as f:
         html = f.read()
     soup = bs4.BeautifulSoup(html, 'html.parser')
     for id, code in code_dict.items():
-        # Defense-in-depth: strip any remaining thinking tokens
-        # (VLLMBot.ask() should already handle this, but just in case)
-        code = re.sub(r'<\|channel>thought.*?<channel\|>', '', code, flags=re.DOTALL)
-        code = code.replace('</channel|>', '')
-        code = re.sub(r'<think>.*?</think>', '', code, flags=re.DOTALL)
-        
-        # Parse JSON to extract the HTML content safely
-        try:
-            cleaned_code = code.strip()
-            if cleaned_code.startswith("```json"):
-                cleaned_code = cleaned_code[7:]
-            if cleaned_code.startswith("```"):
-                cleaned_code = cleaned_code[3:]
-            if cleaned_code.endswith("```"):
-                cleaned_code = cleaned_code[:-3]
-            parsed_json = json.loads(cleaned_code.strip(), strict=False)
-            if "html" in parsed_json:
-                code = parsed_json["html"]
-        except Exception:
-            # Fallback 1: find JSON object anywhere, parse with strict=False
-            json_match = re.search(r'\{\s*"html"\s*:\s*"', code)
-            if json_match:
-                try:
-                    parsed_json = json.loads(code[json_match.start():], strict=False)
-                    if "html" in parsed_json:
-                        code = parsed_json["html"]
-                except (json.JSONDecodeError, ValueError):
-                    # Fallback 2: regex-extract the html string value directly
-                    m = re.search(
-                        r'"html"\s*:\s*"(.*?)"\s*\}\s*\Z',
-                        code[json_match.start():],
-                        flags=re.DOTALL,
-                    )
-                    if m:
-                        code = m.group(1).encode().decode('unicode_escape', errors='replace')
-            
-        code = code.replace("```html", "").replace("```", "").strip()
+        code = extract_html_payload(code)
         div = soup.find(id=id)
         # replace the inner html of the div
         if div:
@@ -374,7 +384,6 @@ def code_substitution(html_file, code_dict):
 
 def html_refinement(html_file, output_file, img_path, bot):
      """refine the html file"""
-     import json
      try:
          with open(html_file, "r") as f:
              html_content = f.read()
@@ -384,22 +393,7 @@ def html_refinement(html_file, output_file, img_path, bot):
          prompt = PROMPT_refinement.replace("[CODE]", html_content)
 
          refined_html = bot.ask(prompt, encode_image(img))
-         
-         try:
-             cleaned_ref = refined_html.strip()
-             if cleaned_ref.startswith("```json"):
-                 cleaned_ref = cleaned_ref[7:]
-             if cleaned_ref.startswith("```"):
-                 cleaned_ref = cleaned_ref[3:]
-             if cleaned_ref.endswith("```"):
-                 cleaned_ref = cleaned_ref[:-3]
-             parsed_ref = json.loads(cleaned_ref.strip(), strict=False)
-             if "html" in parsed_ref:
-                 refined_html = parsed_ref["html"]
-         except Exception:
-             pass
-             
-         refined_html = refined_html.replace("```html", "").replace("```", "").strip()
+         refined_html = extract_html_payload(refined_html)
 
          with open(output_file, "w") as f:
              f.write(refined_html)
