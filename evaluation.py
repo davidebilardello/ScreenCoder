@@ -63,14 +63,15 @@ def clip_similarity(img_a_path: Path, img_b_path: Path) -> float:
     inputs = processor(images=images, return_tensors="pt").to(device)
     with torch.no_grad():
         out = model.get_image_features(**inputs)
-        if not torch.is_tensor(out):
-            pooled = getattr(out, "pooler_output", None)
-            if pooled is None:
-                pooled = out.last_hidden_state[:, 0]
-            proj = getattr(model, "visual_projection", None)
-            feats = proj(pooled) if proj is not None else pooled
-        else:
+        if torch.is_tensor(out):
             feats = out
+        else:
+            feats = getattr(out, "pooler_output", None)
+            if feats is None:
+                feats = out.last_hidden_state[:, 0]
+            proj = getattr(model, "visual_projection", None)
+            if proj is not None and feats.shape[-1] == proj.in_features:
+                feats = proj(feats)
     feats = feats / feats.norm(dim=-1, keepdim=True)
     sim = (feats[0] @ feats[1]).item()
     # Cosine in [-1,1] -> map to [0,1]
