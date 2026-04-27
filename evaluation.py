@@ -87,20 +87,42 @@ def ocr_blocks(image_path: Path):
     if img is None:
         return []
     H, W = img.shape[:2]
-    raw = ocr.ocr(str(image_path), cls=True)
+    try:
+        raw = ocr.predict(str(image_path))
+    except (AttributeError, TypeError):
+        try:
+            raw = ocr.ocr(str(image_path))
+        except TypeError:
+            raw = ocr.ocr(str(image_path), cls=True)
     blocks = []
     if not raw:
         return blocks
-    # PaddleOCR returns [[(poly, (text, conf)), ...]] (one entry per page)
-    page = raw[0] if raw and isinstance(raw[0], list) else raw
-    if page is None:
-        return blocks
-    for entry in page:
-        try:
-            poly, (text, conf) = entry
-        except Exception:
-            continue
-        if not text or not text.strip():
+
+    # Normalize to a list of (poly, text) regardless of PaddleOCR version
+    items = []
+    first = raw[0] if raw else None
+    if isinstance(first, dict) or hasattr(first, "get"):
+        # PaddleOCR 3.x: list of dict-like results, one per page
+        for page in raw:
+            page_d = page if isinstance(page, dict) else getattr(page, "json", page)
+            if hasattr(page_d, "get") and not isinstance(page_d, dict):
+                page_d = dict(page_d)
+            texts = page_d.get("rec_texts") or page_d.get("texts") or []
+            polys = page_d.get("rec_polys") or page_d.get("dt_polys") or page_d.get("polys") or []
+            for poly, text in zip(polys, texts):
+                items.append((poly, text))
+    else:
+        # PaddleOCR 2.x: [[ [poly, (text, conf)], ... ]] per page
+        page = first if isinstance(first, list) else raw
+        for entry in (page or []):
+            try:
+                poly, (text, _conf) = entry
+                items.append((poly, text))
+            except Exception:
+                continue
+
+    for poly, text in items:
+        if not text or not str(text).strip():
             continue
         xs = [p[0] for p in poly]
         ys = [p[1] for p in poly]
@@ -114,7 +136,7 @@ def ocr_blocks(image_path: Path):
         # cv2 is BGR -> convert to RGB tuple
         b, g, r = crop.reshape(-1, 3).mean(axis=0)
         blocks.append({
-            "text": text.strip(),
+            "text": str(text).strip(),
             "bbox": (x1, y1, x2, y2),
             "color": (float(r), float(g), float(b)),
             "img_size": (W, H),
