@@ -93,12 +93,21 @@ PIPELINE_SCRIPTS = [
 
 def _run_script(script_rel: str, env: dict):
     script_path = REPO_ROOT / script_rel
-    subprocess.run(
+    proc = subprocess.run(
         [sys.executable, str(script_path)],
-        check=True,
         cwd=str(REPO_ROOT),
         env=env,
+        capture_output=True,
+        text=True,
     )
+    if proc.returncode != 0:
+        tail_out = "\n".join(proc.stdout.splitlines()[-40:])
+        tail_err = "\n".join(proc.stderr.splitlines()[-40:])
+        raise RuntimeError(
+            f"{script_rel} failed (exit {proc.returncode})\n"
+            f"--- stdout (tail) ---\n{tail_out}\n"
+            f"--- stderr (tail) ---\n{tail_err}"
+        )
 
 
 def _wait_for_vllm(base_url: str, timeout: float = 300.0) -> bool:

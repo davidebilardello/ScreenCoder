@@ -221,7 +221,6 @@ def generate_code_parallel(bbox_tree, img_path, bot):
                 for attempt in range(max_retries):
                     try:
                         code = bot.ask(prompt, encode_image(cropped_img))
-                        print(code)
                         code_dict[node["id"]] = code
                         return
                     except Exception as e:
