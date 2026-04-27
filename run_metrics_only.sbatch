@@ -25,6 +25,12 @@ export USE_TF=0
 export USE_PADDLE=0
 export TRANSFORMERS_NO_ADVISORY_WARNINGS=1
 
+# Disable PaddlePaddle oneDNN + new PIR executor to avoid:
+#  "ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute...]"
+export FLAGS_use_mkldnn=0
+export FLAGS_enable_pir_in_executor=0
+export FLAGS_enable_new_ir_in_executor=0
+
 export MY_CACHE_DIR="/work/tesi_dbilardello/.cache_ml"
 mkdir -p $MY_CACHE_DIR
 export HF_HOME="$MY_CACHE_DIR/huggingface"
