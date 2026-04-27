@@ -37,13 +37,12 @@ export XDG_CONFIG_HOME="$MY_CACHE_DIR/config"
 
 mkdir -p sbatch_logs
 
-# Usage:
-#   sbatch run_metrics_only.sbatch data/runs/run_31263
-# (or set RUN_DIR env var if you prefer)
-RUN_DIR="${1:-$RUN_DIR}"
-if [ -z "$RUN_DIR" ]; then
-    echo "ERROR: RUN_DIR must be passed as first arg, e.g.:"
-    echo "  sbatch run_metrics_only.sbatch data/runs/run_31263"
+# --- Choose RUN_DIR: edit this line, or pass as $1, or export RUN_DIR ---
+RUN_DIR="${1:-${RUN_DIR:-data/runs/run_31263}}"
+if [ ! -d "$RUN_DIR" ]; then
+    echo "ERROR: RUN_DIR '$RUN_DIR' does not exist."
+    echo "Edit run_metrics_only.sbatch and set the default, or run:"
+    echo "  sbatch run_metrics_only.sbatch <path-to-run-dir>"
     exit 1
 fi
 
