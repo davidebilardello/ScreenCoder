@@ -48,7 +48,7 @@ def _get_clip():
 def _get_ocr():
     if _OCR["model"] is None:
         from paddleocr import PaddleOCR
-        _OCR["model"] = PaddleOCR(use_angle_cls=True, lang="en", show_log=False)
+        _OCR["model"] = PaddleOCR(use_textline_orientation=True, lang="en")
     return _OCR["model"]
 
 
