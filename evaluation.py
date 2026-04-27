@@ -54,20 +54,10 @@ def _get_clip():
 
 def _get_ocr():
     if _OCR["model"] is None:
-        from paddleocr import PaddleOCR
-        kwargs = dict(use_textline_orientation=True, lang="en", enable_mkldnn=False)
-        # Try GPU first (much faster than CPU); fall back if unsupported
-        try:
-            _OCR["model"] = PaddleOCR(device="gpu", **kwargs)
-        except TypeError:
-            try:
-                _OCR["model"] = PaddleOCR(use_gpu=True, **kwargs)
-            except TypeError:
-                kwargs.pop("enable_mkldnn", None)
-                try:
-                    _OCR["model"] = PaddleOCR(device="gpu", **kwargs)
-                except TypeError:
-                    _OCR["model"] = PaddleOCR(**kwargs)
+        import easyocr
+        import torch
+        gpu = torch.cuda.is_available()
+        _OCR["model"] = easyocr.Reader(["en"], gpu=gpu)
     return _OCR["model"]
 
 
@@ -106,39 +96,13 @@ def ocr_blocks(image_path: Path):
     if img is None:
         return []
     H, W = img.shape[:2]
-    try:
-        raw = ocr.predict(str(image_path))
-    except (AttributeError, TypeError):
-        try:
-            raw = ocr.ocr(str(image_path))
-        except TypeError:
-            raw = ocr.ocr(str(image_path), cls=True)
+    # EasyOCR returns: [(poly, text, conf), ...] where poly is 4x[x,y]
+    raw = ocr.readtext(str(image_path))
     blocks = []
     if not raw:
         return blocks
 
-    # Normalize to a list of (poly, text) regardless of PaddleOCR version
-    items = []
-    first = raw[0] if raw else None
-    if isinstance(first, dict) or hasattr(first, "get"):
-        # PaddleOCR 3.x: list of dict-like results, one per page
-        for page in raw:
-            page_d = page if isinstance(page, dict) else getattr(page, "json", page)
-            if hasattr(page_d, "get") and not isinstance(page_d, dict):
-                page_d = dict(page_d)
-            texts = page_d.get("rec_texts") or page_d.get("texts") or []
-            polys = page_d.get("rec_polys") or page_d.get("dt_polys") or page_d.get("polys") or []
-            for poly, text in zip(polys, texts):
-                items.append((poly, text))
-    else:
-        # PaddleOCR 2.x: [[ [poly, (text, conf)], ... ]] per page
-        page = first if isinstance(first, list) else raw
-        for entry in (page or []):
-            try:
-                poly, (text, _conf) = entry
-                items.append((poly, text))
-            except Exception:
-                continue
+    items = [(entry[0], entry[1]) for entry in raw if len(entry) >= 2]
 
     for poly, text in items:
         if not text or not str(text).strip():
