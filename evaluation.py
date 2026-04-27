@@ -55,12 +55,19 @@ def _get_clip():
 def _get_ocr():
     if _OCR["model"] is None:
         from paddleocr import PaddleOCR
+        kwargs = dict(use_textline_orientation=True, lang="en", enable_mkldnn=False)
+        # Try GPU first (much faster than CPU); fall back if unsupported
         try:
-            _OCR["model"] = PaddleOCR(
-                use_textline_orientation=True, lang="en", enable_mkldnn=False
-            )
+            _OCR["model"] = PaddleOCR(device="gpu", **kwargs)
         except TypeError:
-            _OCR["model"] = PaddleOCR(use_textline_orientation=True, lang="en")
+            try:
+                _OCR["model"] = PaddleOCR(use_gpu=True, **kwargs)
+            except TypeError:
+                kwargs.pop("enable_mkldnn", None)
+                try:
+                    _OCR["model"] = PaddleOCR(device="gpu", **kwargs)
+                except TypeError:
+                    _OCR["model"] = PaddleOCR(**kwargs)
     return _OCR["model"]
 
 
