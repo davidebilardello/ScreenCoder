@@ -37,10 +37,13 @@ export XDG_CONFIG_HOME="$MY_CACHE_DIR/config"
 
 mkdir -p sbatch_logs
 
-# Pass RUN_DIR=data/runs/run_31263 (or whatever) when sbatching this script:
-#   sbatch --export=ALL,RUN_DIR=data/runs/run_31263 run_metrics_only.sbatch
+# Usage:
+#   sbatch run_metrics_only.sbatch data/runs/run_31263
+# (or set RUN_DIR env var if you prefer)
+RUN_DIR="${1:-$RUN_DIR}"
 if [ -z "$RUN_DIR" ]; then
-    echo "ERROR: RUN_DIR env var must be set (e.g. data/runs/run_31263)"
+    echo "ERROR: RUN_DIR must be passed as first arg, e.g.:"
+    echo "  sbatch run_metrics_only.sbatch data/runs/run_31263"
     exit 1
 fi
 
