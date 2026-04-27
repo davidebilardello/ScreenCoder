@@ -18,6 +18,13 @@ Outputs:
 import argparse
 import csv
 import json
+import os
+# Must come BEFORE any paddle/paddleocr import: disable PIR new-executor +
+# oneDNN to avoid "ConvertPirAttribute2RuntimeAttribute not support" crashes.
+os.environ.setdefault("FLAGS_use_mkldnn", "0")
+os.environ.setdefault("FLAGS_enable_pir_in_executor", "0")
+os.environ.setdefault("FLAGS_enable_new_ir_in_executor", "0")
+os.environ.setdefault("FLAGS_enable_pir_api", "0")
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -48,7 +55,12 @@ def _get_clip():
 def _get_ocr():
     if _OCR["model"] is None:
         from paddleocr import PaddleOCR
-        _OCR["model"] = PaddleOCR(use_textline_orientation=True, lang="en")
+        try:
+            _OCR["model"] = PaddleOCR(
+                use_textline_orientation=True, lang="en", enable_mkldnn=False
+            )
+        except TypeError:
+            _OCR["model"] = PaddleOCR(use_textline_orientation=True, lang="en")
     return _OCR["model"]
 
 
