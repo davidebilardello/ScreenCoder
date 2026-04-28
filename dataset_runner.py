@@ -110,7 +110,7 @@ def _run_script(script_rel: str, env: dict):
         )
 
 
-def _wait_for_vllm(base_url: str, timeout: float = 300.0) -> bool:
+def _wait_for_vllm(base_url: str, timeout: float = 900.0) -> bool:
     """Poll the vllm /v1/models endpoint until it returns 200 or timeout."""
     deadline = time.time() + timeout
     url = base_url.rstrip("/") + "/models"

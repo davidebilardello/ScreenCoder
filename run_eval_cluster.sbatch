@@ -38,6 +38,10 @@ export TRITON_CACHE_DIR="/tmp/triton_cache_${SLURM_JOB_ID}"
 mkdir -p "$TRITON_CACHE_DIR"
 
 export HF_HOME="$MY_CACHE_DIR/huggingface"
+# Compute node has no internet — force offline (model must be pre-downloaded
+# on the login node with: huggingface-cli download Qwen/Qwen2.5-VL-3B-Instruct)
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 export TORCH_HOME="$MY_CACHE_DIR/torch"
 export TORCHINDUCTOR_CACHE_DIR="$MY_CACHE_DIR/torchinductor"
 export XDG_CACHE_HOME="$MY_CACHE_DIR"
