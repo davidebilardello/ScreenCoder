@@ -535,6 +535,9 @@ class VLLMRemote(Bot):
             max_tokens=8192,
             temperature=0.1,
             seed=42,
+            frequency_penalty=0.3,
+            presence_penalty=0.2,
+            extra_body={"repetition_penalty": 1.05},
         )
         if json:
             kwargs["response_format"] = {
