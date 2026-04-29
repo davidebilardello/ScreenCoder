@@ -6,7 +6,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:4
 #SBATCH --time=20:00:00
 #SBATCH --account=tesi_dbilardello
 #SBATCH --partition=boost_usr_prod
@@ -60,7 +60,7 @@ if [ -n "${LIMIT}" ]; then
     LIMIT_FLAG="--limit ${LIMIT}"
 fi
 
-VLLM_MODEL="${VLLM_MODEL:-Qwen/Qwen2.5-VL-3B-Instruct}"
+VLLM_MODEL="${VLLM_MODEL:-Qwen/Qwen2.5-VL-32B-Instruct}"
 VLLM_PORT="${VLLM_PORT:-8000}"
 VLLM_URL="http://127.0.0.1:${VLLM_PORT}/v1"
 WORKERS="${WORKERS:-8}"
@@ -79,7 +79,7 @@ python -m vllm.entrypoints.openai.api_server \
     --port "$VLLM_PORT" \
     --gpu-memory-utilization 0.9 \
     --max-model-len 16384 \
-    --tensor-parallel-size 1 \
+    --tensor-parallel-size 4 \
     --enforce-eager \
     --limit-mm-per-prompt '{"image": 1}' \
     --trust-remote-code \
