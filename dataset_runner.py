@@ -110,7 +110,7 @@ def _run_script(script_rel: str, env: dict):
         )
 
 
-def _wait_for_vllm(base_url: str, timeout: float = 900.0) -> bool:
+def _wait_for_vllm(base_url: str, timeout: float = 1800.0) -> bool:
     """Poll the vllm /v1/models endpoint until it returns 200 or timeout."""
     deadline = time.time() + timeout
     url = base_url.rstrip("/") + "/models"
@@ -220,7 +220,8 @@ def _process_one_sample(name: str, img_bytes: bytes, html_bytes: bytes,
 def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None,
                 skip_existing: bool = True, workers: int = 1,
                 vllm_url: str | None = None,
-                vllm_model: str | None = None):
+                vllm_model: str | None = None,
+                vllm_timeout: float = 1800.0):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -234,8 +235,8 @@ def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None,
 
         url = os.environ.get("SCREENCODER_VLLM_URL", "http://localhost:8000/v1")
         print(f"Waiting for vllm server at {url} ...")
-        if not _wait_for_vllm(url):
-            raise RuntimeError(f"vllm server at {url} did not become ready within timeout")
+        if not _wait_for_vllm(url, timeout=vllm_timeout):
+            raise RuntimeError(f"vllm server at {url} did not become ready within {vllm_timeout:.0f}s timeout")
         print(f"vllm server is up at {url}")
     elif workers > 1:
         print("[warn] workers>1 without remote vllm: each worker would load its own "
@@ -328,11 +329,14 @@ def main():
                          "If set, scripts use the remote client (no in-process model load).")
     ap.add_argument("--vllm-model", type=str, default=os.environ.get("SCREENCODER_VLLM_MODEL"),
                     help="Model name to send to the vllm server (must match what the server is serving).")
+    ap.add_argument("--vllm-timeout", type=float, default=1800.0,
+                    help="Seconds to wait for the vllm server to become ready (default: 1800).")
     args = ap.parse_args()
 
     run_dataset(args.repo_id, args.output, limit=args.limit,
                 skip_existing=not args.no_skip_existing,
-                workers=args.workers, vllm_url=args.vllm_url, vllm_model=args.vllm_model)
+                workers=args.workers, vllm_url=args.vllm_url, vllm_model=args.vllm_model,
+                vllm_timeout=args.vllm_timeout)
 
 
 if __name__ == "__main__":
