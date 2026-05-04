@@ -610,6 +610,7 @@ class VLLMBot(Bot):
 
         if image_encoding:
             messages = [
+                {"role": "system", "content": system_msg},
                 {
                     "role": "user",
                     "content": [
@@ -624,7 +625,7 @@ class VLLMBot(Bot):
                         }
                     ]
                 }
-            ],
+            ]
 
         else:
             messages = [
@@ -637,21 +638,18 @@ class VLLMBot(Bot):
             max_tokens=16384,
             seed=42,
         )
-      # Pass enable_thinking=False via chat_template_kwargs for Qwen3 models
+        # Pass enable_thinking=False via chat_template_kwargs for Qwen3 models
         chat_kwargs = {}
         if "qwen3" in self.model.lower() or "Qwen3" in self.model:
             chat_kwargs["chat_template_kwargs"] = {"enable_thinking": False}
-        
 
         with self.lock:
             outputs = self.llm.chat(
                 messages=messages,
                 sampling_params=sampling_params,
-                chat_template=self.custom_chat_template
+                chat_template=self.custom_chat_template,
+                **chat_kwargs,
             )
-
-        prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        outputs = self.llm.generate(prompt, SamplingParams(temperature=0.0, max_tokens=1024))
 
         response = outputs[0].outputs[0].text
 
