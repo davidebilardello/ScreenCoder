@@ -146,10 +146,15 @@ def parse_bboxes(bbox_input: str, image_path: str) -> dict[str, tuple[int, int, 
                 try:
                     norm_coords = list(map(int, coords_str.split()))
                     if len(norm_coords) == 4:
-                        x_min = int(norm_coords[0])
-                        y_min = int(norm_coords[1])
-                        x_max = int(norm_coords[2])
-                        y_max = int(norm_coords[3])
+                        x_min, y_min, x_max, y_max = norm_coords
+                        # Qwen2.5-VL emits absolute pixel coordinates, while the
+                        # rest of the pipeline assumes a 0-1000 normalized scale.
+                        model_name = os.environ.get("SCREENCODER_VLLM_MODEL", "")
+                        if "qwen" in model_name.lower():
+                            x_min = round(x_min * 1000 / w)
+                            y_min = round(y_min * 1000 / h)
+                            x_max = round(x_max * 1000 / w)
+                            y_max = round(y_max * 1000 / h)
                         bboxes[name] = (x_min, y_min, x_max, y_max)
                         print(f"Successfully parsed {name}: {bboxes[name]}")
                     else:
