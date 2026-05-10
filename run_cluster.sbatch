@@ -19,6 +19,9 @@ module load cuda/11.8
 
 source .venv/bin/activate
 
+# Ensure playwright browsers are installed in the cache directory
+python -m playwright install chromium
+
 export KMP_DUPLICATE_LIB_OK=TRUE
 export USE_TORCH=1
 export USE_TF=0
@@ -38,6 +41,8 @@ export TRITON_CACHE_DIR="/tmp/triton_cache_${SLURM_JOB_ID}"
 mkdir -p "$TRITON_CACHE_DIR"
 
 export HF_HOME="$MY_CACHE_DIR/huggingface"
+export HF_HUB_OFFLINE=0
+export TRANSFORMERS_OFFLINE=0
 export TORCH_HOME="$MY_CACHE_DIR/torch"
 export TORCHINDUCTOR_CACHE_DIR="$MY_CACHE_DIR/torchinductor"
 export XDG_CACHE_HOME="$MY_CACHE_DIR"
