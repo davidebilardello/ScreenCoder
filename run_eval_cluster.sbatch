@@ -54,10 +54,16 @@ mkdir -p sbatch_logs
 
 # ---- Configurable paths ----
 REPO_ID="${REPO_ID:-Leigest/ScreenCoder}"
+INPUT_DIR="${INPUT_DIR:-/work/tesi_dbilardello/test_dataset/}"
 RUN_DIR="${RUN_DIR:-data/runs/run_${SLURM_JOB_ID}}"
 LIMIT_FLAG=""
 if [ -n "${LIMIT}" ]; then
     LIMIT_FLAG="--limit ${LIMIT}"
+fi
+
+DATA_SRC_FLAG="--repo-id $REPO_ID"
+if [ -n "$INPUT_DIR" ]; then
+    DATA_SRC_FLAG="--input-dir $INPUT_DIR"
 fi
 
 VLLM_MODEL="${VLLM_MODEL:-Qwen/Qwen2.5-VL-7B-Instruct}"
@@ -65,10 +71,14 @@ VLLM_PORT="${VLLM_PORT:-8000}"
 VLLM_URL="http://127.0.0.1:${VLLM_PORT}/v1"
 WORKERS="${WORKERS:-8}"
 
-echo "Repo:    $REPO_ID"
-echo "Run dir: $RUN_DIR"
-echo "Model:   $VLLM_MODEL"
-echo "Workers: $WORKERS"
+if [ -n "$INPUT_DIR" ]; then
+    echo "Input Dir: $INPUT_DIR"
+else
+    echo "Repo:      $REPO_ID"
+fi
+echo "Run dir:   $RUN_DIR"
+echo "Model:     $VLLM_MODEL"
+echo "Workers:   $WORKERS"
 
 # 1) Start vllm OpenAI server in background (loaded once, reused for all samples)
 mkdir -p "$RUN_DIR"
@@ -99,12 +109,13 @@ trap cleanup EXIT INT TERM
 
 # 2) Generate HTML for every screenshot (waits internally for the server to be ready)
 python dataset_runner.py \
-    --repo-id "$REPO_ID" \
+    $DATA_SRC_FLAG \
     --output "$RUN_DIR" \
     --workers "$WORKERS" \
     --vllm-url "$VLLM_URL" \
     --vllm-model "$VLLM_MODEL" \
     $LIMIT_FLAG
+
 
 # 3) Compute Design2Code-style metrics on the produced run
 python evaluation.py --run "$RUN_DIR"

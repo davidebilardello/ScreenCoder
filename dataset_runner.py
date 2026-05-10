@@ -217,6 +217,100 @@ def _process_one_sample(name: str, img_bytes: bytes, html_bytes: bytes,
             shutil.rmtree(work_root, ignore_errors=True)
 
 
+def _process_local_sample(image_path: Path, html_path: Path | None, name: str,
+                          sample_out: Path, work_root: Path) -> tuple[str, str]:
+    sample_out.mkdir(parents=True, exist_ok=True)
+    if html_path and html_path.exists():
+        shutil.copy2(html_path, sample_out / "reference.html")
+    else:
+        # Create an empty reference.html if not present, to keep eval script happy
+        (sample_out / "reference.html").write_text("")
+
+    try:
+        run_pipeline_for_image(image_path, sample_out, work_root)
+        return (name, "ok")
+    except Exception as e:
+        print(f"[error] {name}: {e}")
+        traceback.print_exc()
+        (sample_out / "error.log").write_text(f"{e}\n\n{traceback.format_exc()}")
+        return (name, "error")
+    finally:
+        if work_root.exists():
+            shutil.rmtree(work_root, ignore_errors=True)
+
+
+def run_local_directory(input_dir: Path, output_dir: Path, limit: int | None = None,
+                        skip_existing: bool = True, workers: int = 1,
+                        vllm_url: str | None = None,
+                        vllm_model: str | None = None,
+                        vllm_timeout: float = 1800.0):
+    input_dir = Path(input_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    use_remote = bool(vllm_url) or os.environ.get("SCREENCODER_USE_REMOTE_VLLM") == "1"
+    if use_remote:
+        if vllm_url:
+            os.environ["SCREENCODER_VLLM_URL"] = vllm_url
+        if vllm_model:
+            os.environ["SCREENCODER_VLLM_MODEL"] = vllm_model
+        os.environ["SCREENCODER_USE_REMOTE_VLLM"] = "1"
+
+        url = os.environ.get("SCREENCODER_VLLM_URL", "http://localhost:8000/v1")
+        print(f"Waiting for vllm server at {url} ...")
+        if not _wait_for_vllm(url, timeout=vllm_timeout):
+            raise RuntimeError(f"vllm server at {url} did not become ready within {vllm_timeout:.0f}s timeout")
+        print(f"vllm server is up at {url}")
+
+    extensions = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+    img_files = sorted([
+        f for f in input_dir.iterdir()
+        if f.is_file() and f.suffix.lower() in extensions
+    ])
+
+    if limit is not None:
+        img_files = img_files[:limit]
+
+    print(f"Found {len(img_files)} images in {input_dir}")
+
+    workdirs_root = output_dir / "_workdirs"
+    workdirs_root.mkdir(parents=True, exist_ok=True)
+
+    todo = []
+    results: list[tuple[str, str]] = []
+
+    for img_path in img_files:
+        name = img_path.stem
+        sample_out = output_dir / name
+        if skip_existing and (sample_out / "generated.html").exists():
+            results.append((name, "skipped"))
+            continue
+
+        # Look for matching HTML
+        html_path = img_path.with_suffix(".html")
+        todo.append((img_path, html_path, name, sample_out))
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
+        futures = {}
+        for i, (img_path, html_path, name, sample_out) in enumerate(todo):
+            work_root = workdirs_root / f"w{i}_{name}"
+            fut = ex.submit(_process_local_sample, img_path, html_path, name,
+                            sample_out, work_root)
+            futures[fut] = name
+
+        for fut in tqdm(as_completed(futures), total=len(futures), desc="local_dir"):
+            results.append(fut.result())
+
+    if workdirs_root.exists():
+        shutil.rmtree(workdirs_root, ignore_errors=True)
+
+    ok = sum(1 for _, s in results if s == "ok")
+    err = sum(1 for _, s in results if s == "error")
+    skp = sum(1 for _, s in results if s == "skipped")
+    print(f"\nLocal run complete: {ok} ok, {err} errors, {skp} skipped (total {len(results)})")
+    return results
+
+
 def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None,
                 skip_existing: bool = True, workers: int = 1,
                 vllm_url: str | None = None,
@@ -317,8 +411,9 @@ def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None,
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Run ScreenCoder pipeline over the ScreenBench HF dataset.")
+    ap = argparse.ArgumentParser(description="Run ScreenCoder pipeline over the ScreenBench HF dataset or a local folder.")
     ap.add_argument("--repo-id", type=str, default="Leigest/ScreenCoder", help="HuggingFace dataset repo id")
+    ap.add_argument("--input-dir", type=Path, default=None, help="Local directory containing screenshots to process")
     ap.add_argument("--output", type=Path, required=True, help="Output directory for per-sample results")
     ap.add_argument("--limit", type=int, default=None, help="Process at most N samples")
     ap.add_argument("--no-skip-existing", action="store_true", help="Re-run samples even if generated.html already exists")
@@ -333,10 +428,16 @@ def main():
                     help="Seconds to wait for the vllm server to become ready (default: 1800).")
     args = ap.parse_args()
 
-    run_dataset(args.repo_id, args.output, limit=args.limit,
-                skip_existing=not args.no_skip_existing,
-                workers=args.workers, vllm_url=args.vllm_url, vllm_model=args.vllm_model,
-                vllm_timeout=args.vllm_timeout)
+    if args.input_dir:
+        run_local_directory(args.input_dir, args.output, limit=args.limit,
+                            skip_existing=not args.no_skip_existing,
+                            workers=args.workers, vllm_url=args.vllm_url, vllm_model=args.vllm_model,
+                            vllm_timeout=args.vllm_timeout)
+    else:
+        run_dataset(args.repo_id, args.output, limit=args.limit,
+                    skip_existing=not args.no_skip_existing,
+                    workers=args.workers, vllm_url=args.vllm_url, vllm_model=args.vllm_model,
+                    vllm_timeout=args.vllm_timeout)
 
 
 if __name__ == "__main__":
