@@ -19,6 +19,9 @@ module load cuda/11.8
 
 source .venv/bin/activate
 
+# Ensure playwright browsers are installed in the cache directory
+python -m playwright install chromium
+
 export KMP_DUPLICATE_LIB_OK=TRUE
 export USE_TORCH=1
 export USE_TF=0
