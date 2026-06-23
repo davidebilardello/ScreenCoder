@@ -5,6 +5,11 @@ import io
 import numpy as np
 import os
 import time
+import json
+
+# Evitiamo che eventuali proxy universitari blocchino le richieste Python verso localhost
+os.environ["no_proxy"] = "localhost,127.0.0.1"
+
 from PIL import Image, ImageDraw
 from openai import OpenAI
 from volcenginesdkarkruntime import Ark

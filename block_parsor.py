@@ -155,6 +155,13 @@ def parse_bboxes(bbox_input: str, image_path: str) -> dict[str, tuple[int, int, 
                             y_min = round(y_min * 1000 / h)
                             x_max = round(x_max * 1000 / w)
                             y_max = round(y_max * 1000 / h)
+                        
+                        # Clamp per evitare valori fuori dai bordi (0-1000)
+                        x_min = max(0, min(x_min, 1000))
+                        y_min = max(0, min(y_min, 1000))
+                        x_max = max(0, min(x_max, 1000))
+                        y_max = max(0, min(y_max, 1000))
+
                         bboxes[name] = (x_min, y_min, x_max, y_max)
                         print(f"Successfully parsed {name}: {bboxes[name]}")
                     else:
