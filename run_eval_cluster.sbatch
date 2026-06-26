@@ -90,7 +90,7 @@ python -m vllm.entrypoints.openai.api_server \
     --port "$VLLM_PORT" \
     --gpu-memory-utilization 0.9 \
     --max-model-len 16384 \
-    --tensor-parallel-size 1 \
+    --tensor-parallel-size 2 \
     --enforce-eager \
     --limit-mm-per-prompt '{"image": 1}' \
     --trust-remote-code \
