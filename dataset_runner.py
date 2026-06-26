@@ -243,7 +243,8 @@ def run_local_directory(input_dir: Path, output_dir: Path, limit: int | None = N
                         skip_existing: bool = True, workers: int = 1,
                         vllm_url: str | None = None,
                         vllm_model: str | None = None,
-                        vllm_timeout: float = 1800.0):
+                        vllm_timeout: float = 1800.0,
+                        shuffle_data: bool = False):
     input_dir = Path(input_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -267,6 +268,10 @@ def run_local_directory(input_dir: Path, output_dir: Path, limit: int | None = N
         f for f in input_dir.iterdir()
         if f.is_file() and f.suffix.lower() in extensions
     ])
+
+    if shuffle_data:
+        import random
+        random.shuffle(img_files)
 
     if limit is not None:
         img_files = img_files[:limit]
@@ -315,7 +320,8 @@ def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None,
                 skip_existing: bool = True, workers: int = 1,
                 vllm_url: str | None = None,
                 vllm_model: str | None = None,
-                vllm_timeout: float = 1800.0):
+                vllm_timeout: float = 1800.0,
+                shuffle_data: bool = False):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -367,6 +373,10 @@ def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None,
                     pairs.append(((stem, stem), n, html_by_stem[stem]))
 
         pairs.sort(key=lambda x: (x[0][0], x[0][1]))
+
+        if shuffle_data:
+            import random
+            random.shuffle(pairs)
 
         if limit is not None:
             pairs = pairs[:limit]
@@ -426,18 +436,19 @@ def main():
                     help="Model name to send to the vllm server (must match what the server is serving).")
     ap.add_argument("--vllm-timeout", type=float, default=1800.0,
                     help="Seconds to wait for the vllm server to become ready (default: 1800).")
+    ap.add_argument("--shuffle", action="store_true", help="Randomly shuffle the dataset or input directory before processing.")
     args = ap.parse_args()
 
     if args.input_dir:
         run_local_directory(args.input_dir, args.output, limit=args.limit,
                             skip_existing=not args.no_skip_existing,
                             workers=args.workers, vllm_url=args.vllm_url, vllm_model=args.vllm_model,
-                            vllm_timeout=args.vllm_timeout)
+                            vllm_timeout=args.vllm_timeout, shuffle_data=args.shuffle)
     else:
         run_dataset(args.repo_id, args.output, limit=args.limit,
                     skip_existing=not args.no_skip_existing,
                     workers=args.workers, vllm_url=args.vllm_url, vllm_model=args.vllm_model,
-                    vllm_timeout=args.vllm_timeout)
+                    vllm_timeout=args.vllm_timeout, shuffle_data=args.shuffle)
 
 
 if __name__ == "__main__":

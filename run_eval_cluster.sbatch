@@ -4,10 +4,10 @@
 #SBATCH --error=sbatch_logs/screencoder_eval_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
-#SBATCH --gres=gpu:1
-#SBATCH --time=15:00:00
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
+#SBATCH --gres=gpu:2
+#SBATCH --time=24:00:00
 #SBATCH --account=tesi_dbilardello
 #SBATCH --partition=boost_usr_prod
 #SBATCH --profile=none
@@ -67,7 +67,7 @@ if [ -n "$INPUT_DIR" ]; then
     DATA_SRC_FLAG="--input-dir $INPUT_DIR"
 fi
 
-VLLM_MODEL="${VLLM_MODEL:-Qwen/Qwen2.5-VL-7B-Instruct}"
+VLLM_MODEL="${VLLM_MODEL:-Qwen/Qwen2.5-VL-32B-Instruct}"
 VLLM_PORT="${VLLM_PORT:-8000}"
 VLLM_URL="http://127.0.0.1:${VLLM_PORT}/v1"
 WORKERS="${WORKERS:-8}"
@@ -115,8 +115,9 @@ python dataset_runner.py \
     --workers "$WORKERS" \
     --vllm-url "$VLLM_URL" \
     --vllm-model "$VLLM_MODEL" \
+    --shuffle \
     $LIMIT_FLAG
 
 
 # 3) Compute Design2Code-style metrics on the produced run
-python evaluation.py --run "$RUN_DIR"
+#python evaluation.py --run "$RUN_DIR"
