@@ -10,10 +10,10 @@ DEFAULT_API_PATH = "lm-studio"  # Changed to lm-studio
 # We provide prompts in both Chinese and English.
 PROMPT_MERGE = """Return the bounding boxes of the sidebar, main content, header, and navigation in this webpage screenshot. Please only return the corresponding bounding boxes. Note: 1. The areas should not overlap; 2. All text information and other content should be framed inside; 3. Try to keep it compact without leaving a lot of blank space; 4. Output a label and the corresponding bounding box for each line.
 Example:
-header: <bbox>0 0 1000 80</bbox>
-sidebar: <bbox>0 80 250 900</bbox>
-navigation: <bbox>250 80 1000 150</bbox>
-main content: <bbox>250 150 1000 900</bbox>"""
+header: <bbox>x1 y1 x2 y2</bbox>
+sidebar: <bbox>x1 y1 x2 y2</bbox>
+navigation: <bbox>x1 y1 x2 y2</bbox>
+main content: <bbox>x1 y1 x2 y2</bbox>"""
 # PROMPT_MERGE = "框出网页中的sidebar，main content，header，navigation的位置，请你只返回对应的bounding box，注意：1.各个区域不要重叠；2.所有的文字信息等内容都要框在里面；3.尽量保证紧凑，不留大量空白区域；4.每行输出标签以及对应的bounding box：<bbox>x1 y1 x2 y2</bbox>。"
 BBOX_TAG_START = "<bbox>"
 BBOX_TAG_END = "</bbox>"

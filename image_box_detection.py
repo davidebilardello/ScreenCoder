@@ -5,17 +5,31 @@ from playwright.async_api import async_playwright
 
 from pipeline_paths import input_dir, tmp_dir, PIPELINE_STEM
 
+
 # ---------- Main logic ----------
 async def extract_bboxes_from_html(html_path: Path):
     # 1. Clean HTML to avoid parsing issues with badly generated class attributes
     with open(html_path, 'r', encoding='utf-8') as f:
         html_content = f.read()
-    
+
     # Fix weird class escapes and assignments like class='\"grid' gap-4\"=""
     fixed_html_content = re.sub(r"class='\\\"(.*?)\\\"'", r'class="\1"', html_content)
     fixed_html_content = re.sub(r"class='\\\"(.*?)[^\"]'", r'class="\1"', fixed_html_content)
     fixed_html_content = re.sub(r'([a-zA-Z0-9-]+)\\"=""', r'\1', fixed_html_content)
-    
+
+    # Inject CSS to give broken placeholder images a default aspect ratio
+    css_injection = """<style>
+        img[src*="placeholder"], img[src*="ph"] {
+            aspect-ratio: 16/9;
+            background-color: #cbd5e1;
+            object-fit: cover;
+        }
+    </style>"""
+    if "</head>" in fixed_html_content:
+        fixed_html_content = fixed_html_content.replace("</head>", f"{css_injection}\n</head>")
+    else:
+        fixed_html_content = css_injection + fixed_html_content
+
     # Use a temporary file for the fixed content
     fixed_html_path = html_path.parent / (html_path.stem + "_fixed.html")
     with open(fixed_html_path, 'w', encoding='utf-8') as f:
@@ -49,12 +63,18 @@ async def extract_bboxes_from_html(html_path: Path):
                     // Apply the same filters as before
                     if (el.tagName === 'SVG') continue;
                     if (el.tagName !== 'IMG' && el.innerText && el.innerText.trim() !== '') continue;
-                    
+                    if (el.tagName === 'IMG') {
+                        const src = el.getAttribute('src') || '';
+                        if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+                            continue;
+                        }
+                    }
+
                     const el_rect = el.getBoundingClientRect();
                     if (el_rect.width < 5 || el_rect.height < 5) continue;
-                    
+
                     const el_center = { x: el_rect.left + el_rect.width / 2, y: el_rect.top + el_rect.height / 2 };
-                    
+
                     // Find which region this placeholder is inside
                     let containing_region_id = null;
                     for (const region_el of region_containers) {
@@ -65,7 +85,7 @@ async def extract_bboxes_from_html(html_path: Path):
                             break; // Assume non-overlapping regions
                         }
                     }
-                    
+
                     // Only include placeholders that are inside a detected region
                     if (containing_region_id) {
                         let is_duplicate = false;
@@ -111,32 +131,34 @@ def draw_bboxes_on_image(img, region_bboxes, placeholder_bboxes):
     """Draw region (green) and placeholder (red) boxes with labels on img."""
     boxed = img.copy()
     H, W = img.shape[:2]
-    
+
     # --- Helper to draw a single box with label ---
     def draw_box_with_label(b, color, label_text):
         x, y, w, h = b["x"], b["y"], b["w"], b["h"]
         # Boundary correction
         x_draw, y_draw = max(0, x), max(0, y)
         w_draw, h_draw = min(w, W - x_draw), min(h, H - y_draw)
-        cv2.rectangle(boxed, (x_draw, y_draw), (x_draw + w_draw, y_draw + h_draw), color, 3) # Thicker lines
-        
+        cv2.rectangle(boxed, (x_draw, y_draw), (x_draw + w_draw, y_draw + h_draw), color, 3)  # Thicker lines
+
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.8
         font_thickness = 2
         text_color = (255, 255, 255)
 
         (text_width, text_height), baseline = cv2.getTextSize(label_text, font, font_scale, font_thickness)
-        
+
         # Position for the label background. Put it just above the box.
         label_y_start = y - text_height - baseline - 5
-        if label_y_start < 0: # Adjust if the label goes off the top of the image
+        if label_y_start < 0:  # Adjust if the label goes off the top of the image
             label_y_start = y + 5
-        
+
         label_x_start = x
         label_y_end = label_y_start + text_height + baseline
-        
-        cv2.rectangle(boxed, (label_x_start, label_y_start), (label_x_start + text_width, label_y_end), color, cv2.FILLED)
-        cv2.putText(boxed, label_text, (label_x_start + 2, label_y_start + text_height), font, font_scale, text_color, font_thickness)
+
+        cv2.rectangle(boxed, (label_x_start, label_y_start), (label_x_start + text_width, label_y_end), color,
+                      cv2.FILLED)
+        cv2.putText(boxed, label_text, (label_x_start + 2, label_y_start + text_height), font, font_scale, text_color,
+                    font_thickness)
 
     # --- Draw Regions (Green) ---
     for b in region_bboxes:
@@ -145,7 +167,7 @@ def draw_bboxes_on_image(img, region_bboxes, placeholder_bboxes):
     # --- Draw Placeholders (Red) ---
     for b in placeholder_bboxes:
         draw_box_with_label(b, color=(0, 0, 255), label_text=f'{b.get("region_id")}_{b.get("id")}')
-        
+
     return boxed
 
 
@@ -155,7 +177,8 @@ def main(args):
     if img is None:
         sys.exit(f"Error: Cannot read image {args.screenshot}")
     if img.std() < 5:
-        print("Warning: The screenshot is almost pure color, it may not be the original screenshot with real thumbnails.")
+        print(
+            "Warning: The screenshot is almost pure color, it may not be the original screenshot with real thumbnails.")
 
     H, W = img.shape[:2]
 
@@ -169,12 +192,11 @@ def main(args):
     # Calculate separate scale factors for X and Y to handle aspect ratio differences
     scale_x = W / layout_width if layout_width > 0 else 1
     scale_y = H / layout_height if layout_height > 0 else 1
-    
+
     if abs(scale_x - scale_y) > 0.05:
         print(f"[*] Detected different X/Y scales. X: {scale_x:.2f}, Y: {scale_y:.2f}")
     elif abs(scale_x - 1.0) > 0.05:
         print(f"[*] Detected uniform scale: {scale_x:.2f}")
-
 
     # Scale all bboxes to the original image coordinate system
     scaled_regions = []
@@ -202,7 +224,6 @@ def main(args):
     cv2.imwrite(str(out_png), overlay)
     print(f"Success: BBox overlay saved to {out_png}")
 
-
     # Convert absolute pixel coordinates to proportions for the final JSON output
     proportional_regions = []
     for b in scaled_regions:
@@ -211,7 +232,7 @@ def main(args):
             "x": b["x"] / W, "y": b["y"] / H,
             "w": b["w"] / W, "h": b["h"] / H
         })
-        
+
     proportional_placeholders = []
     for b in scaled_placeholders:
         proportional_placeholders.append({

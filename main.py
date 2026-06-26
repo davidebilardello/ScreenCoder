@@ -52,6 +52,11 @@ def main():
     setup_environment()
     print("\nStarting the Screencoder test workflow...")
     
+    # Check if an input argument was provided
+    input_path = "data/input/test3.png"  # Di default usa test2.png se clicchi "Play" da PyCharm
+    if len(sys.argv) > 1:
+        input_path = sys.argv[1]
+    
     # Cartella in cui verranno salvati i risultati del test
     run_dir = os.path.join("data", "runs", "test_local_run")
     os.makedirs(run_dir, exist_ok=True)
@@ -64,13 +69,22 @@ def main():
     cmd_runner = [
         sys.executable, "dataset_runner.py",
         "--repo-id", "Leigest/ScreenCoder", 
-        "--input-dir", "data/input", # Modificato: ora usa le immagini locali (come test1.png)
         "--output", run_dir,
-        "--limit", "1", 
         "--workers", "1",
         "--vllm-url", "http://127.0.0.1:8000/v1",
-        "--vllm-model", "Qwen/Qwen2.5-VL-7B-Instruct"
+        "--vllm-model", "Qwen/Qwen2.5-VL-32B-Instruct"
     ]
+    
+    # Handle single file vs directory
+    temp_dir = None
+    if os.path.isfile(input_path):
+        import tempfile
+        import shutil
+        temp_dir = tempfile.mkdtemp(prefix="screencoder_input_")
+        shutil.copy(input_path, temp_dir)
+        cmd_runner.extend(["--input-dir", temp_dir, "--limit", "1"])
+    else:
+        cmd_runner.extend(["--input-dir", input_path, "--limit", "1"])
     
     print(f"Executing: {' '.join(cmd_runner)}")
     try:
@@ -78,6 +92,11 @@ def main():
     except subprocess.CalledProcessError as e:
         print(f"\n[ERROR] dataset_runner.py failed with exit code {e.returncode}")
         sys.exit(1)
+    finally:
+        # Cleanup temporary directory if created
+        if temp_dir and os.path.exists(temp_dir):
+            import shutil
+            shutil.rmtree(temp_dir)
 
     print("\n--- 2. Running Evaluation ---")
     cmd_eval = [
@@ -94,4 +113,4 @@ def main():
     print(f"\nTest completed successfully! Check the output in: {run_dir}")
 
 if __name__ == "__main__":
-    main()
+    main()

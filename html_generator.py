@@ -28,6 +28,7 @@ def extract_html_payload(text: str) -> str:
     s = s.strip()
 
     try:
+        import json
         parsed = json.loads(s, strict=False)
         if isinstance(parsed, dict) and "html" in parsed:
             return parsed["html"]
@@ -53,6 +54,7 @@ def extract_html_payload(text: str) -> str:
 
     return s.replace('```html', '').replace('```', '').strip()
 
+
 # user instruction for each component
 user_instruction = {
     "sidebar": "",
@@ -63,7 +65,7 @@ user_instruction = {
 
 # We provide prompts in both Chinese and English.
 # Chinese prompts for each region
-#PROMPT_DICT = {
+# PROMPT_DICT = {
 #    "sidebar": f"""这是一个container的截图。这是用户给的额外要求：{user_instruction["sidebar"]}请填写一段完整的HTML和tail-wind CSS代码以准确再现给定的容器。请注意所有组块的排版、图标样式、大小、文字信息需要在用户额外条件的基础上与原始截图基本保持一致。以下是供填写的代码：
 #
 #    <div>
@@ -95,72 +97,73 @@ user_instruction = {
 #    </div>
 #
 #    只需返回<div>和</div>标签内的代码"""
-#}
+# }
 
 # English prompts for each region
 PROMPT_DICT = {
-     "sidebar": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["sidebar"]}
+    "sidebar": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["sidebar"]}
      Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
      Please ensure that all block layouts, icon styles, sizes, and text information are consistent with the original screenshot,
      based on the user's additional conditions. Below is the code template to fill in:
-   
+
      <div>
      your code here
      </div>
-   
+
      You MUST output ONLY a valid JSON object containing a single key "html" with the code within the <div> and </div> tags as its string value.""",
-     "header": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["header"]}
+    "header": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["header"]}
      Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
      Please ensure that all blocks' relative positions, layout, text information, and colors within the bounding box
      are consistent with the original screenshot, based on the user's additional conditions. Below is the code template to fill in:
-    
+
      <div>
      your code here
     </div>
-   
+
      You MUST output ONLY a valid JSON object containing a single key "html" with the code within the <div> and </div> tags as its string value.""",
 
-     "navigation": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["navigation"]}
+    "navigation": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["navigation"]}
      Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
      Please ensure that all blocks' relative positions, text layout, and colors within the bounding box
      are consistent with the original screenshot, based on the user's additional conditions.
      Please use the same icons as in the original screenshot. Below is the code template to fill in:
-    
+
      <div>
      your code here
      </div>
-    
+
      You MUST output ONLY a valid JSON object containing a single key "html" with the code within the <div> and </div> tags as its string value.""",
 
-     "main content": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["main content"]}
+    "main content": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["main content"]}
      Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
      Please replace the images in the original screenshot with solid gray blocks (bg-gray-400 tailwind class) of the same size;
      text inside the images does not need to be recognized.
      Please ensure that all blocks' relative positions, layout, text information, and colors within the bounding box
      are consistent with the original screenshot, based on the user's additional conditions. Below is the code template to fill in:
-    
+
      <div>
      your code here
      </div>
-    
+
      You MUST output ONLY a valid JSON object containing a single key "html" with the code within the <div> and </div> tags as its string value."""
 }
 
 # Support refining the generated code.
 PROMPT_refinement = """Here is a prototype image of a webpage. I have an draft HTML file that contains most of the elements and their correct positions, but it has *inaccurate background*, and some missing or wrong elements. Please compare the draft and the prototype image, then revise the draft implementation. Return a single piece of accurate HTML+tail-wind CSS code to reproduce the website. You MUST output ONLY a valid JSON object containing a single key "html" with the content of the HTML+tail-wind CSS code. The current implementation I have is: \n\n [CODE]"""
 
+
 # Generate code for each component
 def generate_code(bbox_tree, img_path, bot):
     """generate code for all the leaf nodes in the bounding box tree, return a dictionary: {'id': 'code'}"""
     img = Image.open(img_path)
     code_dict = {}
-    
+
     def _generate_code(node):
         if node["children"] == []:
             bbox = node["bbox"]
             # bbox is already in pixel coordinates [x1, y1, x2, y2]
             cropped_img = img.crop(bbox)
-            
+
             # Select prompt based on node type
             if "type" in node:
                 if node["type"] == "sidebar":
@@ -177,7 +180,7 @@ def generate_code(bbox_tree, img_path, bot):
             else:
                 print("Node type not found")
                 return
-                
+
             try:
                 code = bot.ask(prompt, encode_image(cropped_img))
                 code_dict[node["id"]] = code
@@ -191,12 +194,13 @@ def generate_code(bbox_tree, img_path, bot):
     _generate_code(bbox_tree)
     return code_dict
 
+
 # Generate code for each component in parallel
 def generate_code_parallel(bbox_tree, img_path, bot):
     """generate code for all the leaf nodes in the bounding box tree, return a dictionary: {'id': 'code'}"""
     code_dict = {}
     t_list = []
-    
+
     def _generate_code_with_retry(node, max_retries=3, retry_delay=2):
         """Generate code with retry mechanism for rate limit errors"""
         try:
@@ -217,15 +221,32 @@ def generate_code_parallel(bbox_tree, img_path, bot):
                     print("Node type not found")
                     code_dict[node["id"]] = f"<!-- Node type not found -->"
                     return
-                
+
                 for attempt in range(max_retries):
                     try:
                         code = bot.ask(prompt, encode_image(cropped_img))
+                        html_code = extract_html_payload(code)
+
+                        # Basic sanity checks to detect model hallucination
+                        if not html_code.strip():
+                            raise ValueError("Empty HTML output.")
+                        if re.search(r'([^<>\s])\1{20,}',
+                                     html_code):  # Hallucinated repetitive sequence (not spaces/tags)
+                            raise ValueError("Hallucinated repetitive sequence detected.")
+
+                        # Try parsing it to ensure it's somewhat valid
+                        soup = bs4.BeautifulSoup(html_code, 'html.parser')
+                        if not soup.find():  # Cannot find a single tag
+                            raise ValueError("No valid HTML tags found.")
+
+                        # If passed, save the RAW code (not extracted) because code_substitution will extract it again.
                         code_dict[node["id"]] = code
+                        print(f"Successfully generated code for node {node['id']}")
                         return
                     except Exception as e:
-                        if "rate_limit" in str(e).lower() and attempt < max_retries - 1:
-                            print(f"Rate limit hit, retrying in {retry_delay} seconds... (Attempt {attempt + 1}/{max_retries})")
+                        if attempt < max_retries - 1:
+                            print(
+                                f"Validation or Error hit, retrying in {retry_delay} seconds... (Attempt {attempt + 1}/{max_retries}) Error: {str(e)}")
                             time.sleep(retry_delay)
                             retry_delay *= 2  # Exponential backoff
                         else:
@@ -246,12 +267,13 @@ def generate_code_parallel(bbox_tree, img_path, bot):
                 _generate_code(child)
 
     _generate_code(bbox_tree)
-    
+
     # Wait for all threads to complete
     for t in t_list:
         t.join()
-        
+
     return code_dict
+
 
 # Generate HTML from the bounding box tree
 def generate_html(bbox_tree, output_file="output.html", img_path="data/test1.png"):
@@ -286,7 +308,7 @@ def generate_html(bbox_tree, output_file="output.html", img_path="data/test1.png
             .box {
                 position: absolute;
                 box-sizing: border-box;
-                overflow: hidden;
+                /* overflow: hidden removed to prevent squashing */
             }
             .box > .container {
                 display: grid;
@@ -318,9 +340,25 @@ def generate_html(bbox_tree, output_file="output.html", img_path="data/test1.png
         width = (bbox[2] - bbox[0]) / parent_width * 100
         height = (bbox[3] - bbox[1]) / parent_height * 100
 
+        # Assign z-index and specific sizing constraints based on component type
+        z_index = 10
+        node_type = node.get('type', '')
+        extra_css = ""
+
+        if node_type == 'header':
+            z_index = 50
+        elif node_type == 'sidebar':
+            z_index = 40
+            extra_css = " min-width: max-content; min-height: max-content;"
+        elif node_type == 'navigation':
+            z_index = 30
+            extra_css = " min-width: max-content; min-height: max-content;"
+        elif node_type == 'main content':
+            z_index = 20
+
         # Start the box div
         html = f'''
-            <div id="{id}" class="box" style="left: {left}%; top: {top}%; width: {width}%; height: {height}%;">
+            <div id="{id}" class="box" style="left: {left}%; top: {top}%; width: {width}%; height: {height}%; z-index: {z_index};{extra_css}">
         '''
 
         if children:
@@ -336,7 +374,7 @@ def generate_html(bbox_tree, output_file="output.html", img_path="data/test1.png
             html += '''
                 </div>
             '''
-        
+
         # Close the box div
         html += '''
             </div>
@@ -349,6 +387,12 @@ def generate_html(bbox_tree, output_file="output.html", img_path="data/test1.png
     root_height = root_bbox[3]
     root_x = root_bbox[0]
     root_y = root_bbox[1]
+
+    # Sort children by area (descending) so smaller boxes are drawn on top (last in DOM means on top for absolute positioning)
+    # Wait, absolute elements that are LATER in the DOM are drawn ON TOP.
+    # We want larger boxes to be drawn FIRST, so smaller boxes are drawn ON TOP.
+    root_children.sort(key=lambda node: (node['bbox'][2] - node['bbox'][0]) * (node['bbox'][3] - node['bbox'][1]),
+                       reverse=True)
 
     html_content = html_template_start
     for child in root_children:
@@ -364,6 +408,7 @@ def generate_html(bbox_tree, output_file="output.html", img_path="data/test1.png
     with open(output_file, 'w') as f:
         f.write(html_content)
 
+
 # Substitute the code in the html file
 def code_substitution(html_file, code_dict):
     """substitute the code in the html file"""
@@ -372,6 +417,12 @@ def code_substitution(html_file, code_dict):
     soup = bs4.BeautifulSoup(html, 'html.parser')
     for id, code in code_dict.items():
         code = extract_html_payload(code)
+        # Fix backslash-escaped quotes to prevent BeautifulSoup from mangling Tailwind classes
+        code = code.replace('\\"', '"')
+
+        # Clean up known Qwen-VL hallucinations (long strings of stripped tokens like divclass=relativedivclass...)
+        code = re.sub(r'divclass=[a-zA-Z0-9]+(?:endid|div)*', '', code)
+
         div = soup.find(id=id)
         # replace the inner html of the div
         if div:
@@ -382,23 +433,25 @@ def code_substitution(html_file, code_dict):
     with open(html_file, "w") as f:
         f.write(soup.decode(formatter="minimal"))
 
+
 def html_refinement(html_file, output_file, img_path, bot):
-     """refine the html file"""
-     try:
-         with open(html_file, "r") as f:
-             html_content = f.read()
+    """refine the html file"""
+    try:
+        with open(html_file, "r") as f:
+            html_content = f.read()
 
-         img = Image.open(img_path)
+        img = Image.open(img_path)
 
-         prompt = PROMPT_refinement.replace("[CODE]", html_content)
+        prompt = PROMPT_refinement.replace("[CODE]", html_content)
 
-         refined_html = bot.ask(prompt, encode_image(img))
-         refined_html = extract_html_payload(refined_html)
+        refined_html = bot.ask(prompt, encode_image(img))
+        refined_html = extract_html_payload(refined_html)
 
-         with open(output_file, "w") as f:
-             f.write(refined_html)
-     except Exception as e:
+        with open(output_file, "w") as f:
+            f.write(refined_html)
+    except Exception as e:
         print(f"An error occurred during HTML refinement: {e}")
+
 
 # Main
 if __name__ == "__main__":
@@ -415,13 +468,13 @@ if __name__ == "__main__":
 
     with Image.open(img_path) as img:
         width, height = img.size
-    
+
     # Create root node with actual image dimensions
     root = {
         "bbox": [0, 0, width, height],  # Use actual image dimensions
         "children": []
     }
-    
+
     # Add each region as a child with its type
     for component_name, norm_bbox in boxes_data.items():
         # The coordinates from block_parsor are normalized to 1000x1000
@@ -430,21 +483,23 @@ if __name__ == "__main__":
         y1 = int(norm_bbox[1] * height / 1000)
         x2 = int(norm_bbox[2] * width / 1000)
         y2 = int(norm_bbox[3] * height / 1000)
-        
+
         child = {
             "bbox": [x1, y1, x2, y2],
             "children": [],
             "type": component_name
         }
         root["children"].append(child)
-    
+
+
     # Assign IDs to all nodes
     def assign_id(node, id):
         node["id"] = id
         for child in node.get("children", []):
-            id = assign_id(child, id+1)
+            id = assign_id(child, id + 1)
         return id
-    
+
+
     assign_id(root, 0)
 
     # print(root)
@@ -466,4 +521,4 @@ if __name__ == "__main__":
     code_substitution(layout_html, code_dict)
 
     # Refine the html file
-    #html_refinement(layout_html, str(tmp_dir() / f"{PIPELINE_STEM}_layout_refined.html"), img_path, bot)
+    # html_refinement(layout_html, str(tmp_dir() / f"{PIPELINE_STEM}_layout_refined.html"), img_path, bot)

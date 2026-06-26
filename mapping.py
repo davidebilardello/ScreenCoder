@@ -12,7 +12,7 @@ import sys
 
 from pipeline_paths import input_dir, tmp_dir, PIPELINE_STEM
 
-CIOU_STRICT = -0.9      # Min CIoU score for a valid one-to-one mapping
+CIOU_STRICT = 0.1      # Min CIoU score for a valid one-to-one mapping
 FILTER_MIN_WH = 10     # UIED filter: ignore boxes smaller than this
 
 # Tools
@@ -123,14 +123,11 @@ def estimate_global_transform(pixel_placeholders, uied_boxes, uied_shape, W_orig
     if not pixel_placeholders or not uied_scaled:
         return scale_x, scale_y, 0, 0
 
-    ph_centers = np.array([center(p["bbox"]) for p in pixel_placeholders])
-    uied_scaled_centers = np.array([center(u["bbox"]) for u in uied_scaled])
-    
-    indices = cdist(ph_centers, uied_scaled_centers).argmin(axis=1)
-    translations = ph_centers - uied_scaled_centers[indices]
-    dx, dy = np.median(translations, axis=0)
-    
-    return scale_x, scale_y, dx, dy
+    # Estimate residual translation (dx, dy) by matching centers
+    # Global median translation shifts distorted layout regions out of bounds.
+    # Therefore, we skip global translation and only rely on scaling, leaving 
+    # the translation to the localized matching step.
+    return scale_x, scale_y, 0, 0
 
 def apply_affine_transform(box, scale_x, scale_y, dx, dy):
     x, y, w, h = box
