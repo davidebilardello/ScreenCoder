@@ -1,3 +1,4 @@
+import math
 import os
 import cv2
 import json
@@ -97,8 +98,26 @@ def resolve_containment(bboxes: dict[str, tuple[int, int, int, int]]) -> dict[st
 #     box2_area = (x4 - x3) * (y4 - y3)
 #     return intersection_area / (box1_area + box2_area - intersection_area)
 
+def _qwen_smart_resize(height: int, width: int, factor: int = 28,
+                       min_pixels: int = 3136, max_pixels: int = 12845056) -> tuple[int, int]:
+    """Replica of qwen_vl_utils.smart_resize: the dimensions the Qwen2.5-VL
+    processor actually feeds to the model (multiples of 28, capped at max_pixels).
+    The model emits pixel coordinates in THIS space, not the original image's."""
+    h_bar = max(factor, round(height / factor) * factor)
+    w_bar = max(factor, round(width / factor) * factor)
+    if h_bar * w_bar > max_pixels:
+        beta = math.sqrt((height * width) / max_pixels)
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
+    elif h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (height * width))
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
+    return h_bar, w_bar
+
+
 # simple version of bbox parsing
-def parse_bboxes(bbox_input: str, image_path: str) -> dict[str, tuple[int, int, int, int]]:
+def parse_bboxes(bbox_input: str, image_path: str, model_name: str = "") -> dict[str, tuple[int, int, int, int]]:
     """Parse bounding box string to dictionary of named coordinate tuples"""
     bboxes = {}
     # print("Raw bbox input:", bbox_input) # Debug print
@@ -108,7 +127,7 @@ def parse_bboxes(bbox_input: str, image_path: str) -> dict[str, tuple[int, int, 
         print(f"Error: Failed to read image {image_path}")
         return bboxes
     h, w = image.shape[:2]
-    
+
     try:
         components = bbox_input.strip().split('\n')
         # print("Split components:", components)  # Debug print
@@ -147,15 +166,17 @@ def parse_bboxes(bbox_input: str, image_path: str) -> dict[str, tuple[int, int, 
                     norm_coords = list(map(int, coords_str.split()))
                     if len(norm_coords) == 4:
                         x_min, y_min, x_max, y_max = norm_coords
-                        # Qwen2.5-VL emits absolute pixel coordinates, while the
-                        # rest of the pipeline assumes a 0-1000 normalized scale.
-                        model_name = os.environ.get("SCREENCODER_VLLM_MODEL", "")
+                        # Qwen2.5-VL emits absolute pixel coordinates in the
+                        # smart-resized image space, while the rest of the
+                        # pipeline assumes a 0-1000 normalized scale.
                         if "qwen" in model_name.lower():
-                            x_min = round(x_min * 1000 / w)
-                            y_min = round(y_min * 1000 / h)
-                            x_max = round(x_max * 1000 / w)
-                            y_max = round(y_max * 1000 / h)
-                        
+                            h_seen, w_seen = _qwen_smart_resize(h, w)
+                            x_min = round(x_min * 1000 / w_seen)
+                            y_min = round(y_min * 1000 / h_seen)
+                            x_max = round(x_max * 1000 / w_seen)
+                            y_max = round(y_max * 1000 / h_seen)
+
+
                         # Clamp per evitare valori fuori dai bordi (0-1000)
                         x_min = max(0, min(x_min, 1000))
                         y_min = max(0, min(y_min, 1000))
@@ -338,7 +359,7 @@ if __name__ == "__main__":
     client = VLLMRemote() if use_remote_vllm() else VLLMBot()
     bbox_content = client.ask(PROMPT_MERGE, encode_image(image_path), False, False)
 
-    bboxes = parse_bboxes(bbox_content, image_path)
+    bboxes = parse_bboxes(bbox_content, image_path, model_name=getattr(client, "model", ""))
 
     # print("=== Starting Sequential Component Detection ===")
     # print(f"Input image: {image_path}")

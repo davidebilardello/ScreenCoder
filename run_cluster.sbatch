@@ -19,9 +19,6 @@ module load cuda/11.8
 
 source .venv/bin/activate
 
-# Ensure playwright browsers are installed in the cache directory
-python -m playwright install chromium
-
 export KMP_DUPLICATE_LIB_OK=TRUE
 export USE_TORCH=1
 export USE_TF=0
@@ -48,9 +45,14 @@ export TORCHINDUCTOR_CACHE_DIR="$MY_CACHE_DIR/torchinductor"
 export XDG_CACHE_HOME="$MY_CACHE_DIR"
 export PIP_CACHE_DIR="$MY_CACHE_DIR/pip"
 export MPLCONFIGDIR="$MY_CACHE_DIR/matplotlib"
-export PLAYWRIGHT_BROWSERS_PATH="$MY_CACHE_DIR/playwright"
+export PLAYWRIGHT_BROWSERS_PATH="/tmp/playwright_${SLURM_JOB_ID}"
 export XDG_CONFIG_HOME="$MY_CACHE_DIR/config"
 
 mkdir -p sbatch_logs
+
+# Must run after PLAYWRIGHT_BROWSERS_PATH is set, otherwise it installs into
+# the default (wrong) location and the pipeline can't find the browser later.
+mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
+python -m playwright install chromium
 
 python main.py

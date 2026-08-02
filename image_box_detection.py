@@ -42,7 +42,10 @@ async def extract_bboxes_from_html(html_path: Path):
         )
         page = await ctx.new_page()
         # Wait until network idle to allow images to load
-        await page.goto(fixed_html_path.resolve().as_uri(), wait_until="networkidle")
+        try:
+            await page.goto(fixed_html_path.resolve().as_uri(), wait_until="networkidle", timeout=30000)
+        except Exception as e:
+            print(f"Warning: Playwright timeout on {fixed_html_path.name}: {e}")
 
         metrics = await page.evaluate("""
             () => {
@@ -65,7 +68,10 @@ async def extract_bboxes_from_html(html_path: Path):
                     if (el.tagName !== 'IMG' && el.innerText && el.innerText.trim() !== '') continue;
                     if (el.tagName === 'IMG') {
                         const src = el.getAttribute('src') || '';
-                        if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+                        // Models often emit placeholder-service imgs instead of gray divs:
+                        // treat those as placeholders, skip only real remote images.
+                        const isPlaceholderSvc = src.includes('placeholder') || src.includes('placehold');
+                        if (!isPlaceholderSvc && (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:'))) {
                             continue;
                         }
                     }
@@ -187,7 +193,9 @@ def main(args):
         extract_bboxes_from_html(args.html)
     )
     if not placeholder_bboxes:
-        sys.exit("Error: No gray placeholder blocks found!")
+        print("Warning: No gray placeholder blocks found!")
+        with open(tmp_dir() / "degraded.flag", "a", encoding="utf-8") as f:
+            f.write("image_box_detection: no gray placeholder blocks found in generated layout\n")
 
     # Calculate separate scale factors for X and Y to handle aspect ratio differences
     scale_x = W / layout_width if layout_width > 0 else 1
@@ -264,7 +272,10 @@ async def _render_html_to_png_async(html_path: Path, out_png: Path, viewport=(12
         browser = await p.chromium.launch()
         ctx = await browser.new_context(viewport={"width": viewport[0], "height": viewport[1]})
         page = await ctx.new_page()
-        await page.goto(html_path.resolve().as_uri(), wait_until="networkidle")
+        try:
+            await page.goto(html_path.resolve().as_uri(), wait_until="networkidle", timeout=30000)
+        except Exception as e:
+            print(f"Warning: Playwright timeout on {html_path.name}: {e}")
         await page.screenshot(path=str(out_png), full_page=full_page)
         await browser.close()
 

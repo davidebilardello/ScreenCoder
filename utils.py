@@ -7,8 +7,22 @@ import os
 import time
 import json
 
-# Evitiamo che eventuali proxy universitari blocchino le richieste Python verso localhost
-os.environ["no_proxy"] = "localhost,127.0.0.1"
+# Evitiamo che eventuali proxy universitari blocchino le richieste Python verso
+# localhost o il nodo che ospita il server vllm. Uniamo invece di sovrascrivere,
+# così un no_proxy esportato dallo sbatch (es. hostname di un server esterno)
+# non viene perso; entrambe le forme perché alcune librerie leggono solo la maiuscola.
+_no_proxy_hosts = {"localhost", "127.0.0.1"}
+for _v in (os.environ.get("no_proxy"), os.environ.get("NO_PROXY")):
+    if _v:
+        _no_proxy_hosts.update(h.strip() for h in _v.split(",") if h.strip())
+_vllm_url = os.environ.get("SCREENCODER_VLLM_URL")
+if _vllm_url:
+    from urllib.parse import urlparse as _urlparse
+    _h = _urlparse(_vllm_url).hostname
+    if _h:
+        _no_proxy_hosts.add(_h)
+os.environ["no_proxy"] = ",".join(sorted(_no_proxy_hosts))
+os.environ["NO_PROXY"] = os.environ["no_proxy"]
 
 from PIL import Image, ImageDraw
 from openai import OpenAI
@@ -540,9 +554,6 @@ class VLLMRemote(Bot):
             max_tokens=8192,
             temperature=0.1,
             seed=42,
-            frequency_penalty=0.3,
-            presence_penalty=0.2,
-            extra_body={"repetition_penalty": 1.05},
         )
         if json:
             kwargs["response_format"] = {

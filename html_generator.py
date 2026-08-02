@@ -49,6 +49,8 @@ def extract_html_payload(text: str) -> str:
                    .replace('\\r', '\r')
                    .replace('\\"', '"')
                    .replace('\\/', '/'))
+        content = re.sub(r'\\u([0-9a-fA-F]{4})',
+                         lambda m: chr(int(m.group(1), 16)), content)
         content = content.replace('\x00', '\\')
         return content
 
@@ -99,12 +101,21 @@ user_instruction = {
 #    只需返回<div>和</div>标签内的代码"""
 # }
 
+# Hard constraint shared by all region prompts: VLMs tend to emit <img> tags with
+# fabricated URLs, which break the gray-placeholder detection/replacement step.
+NO_IMG_RULE = """
+     IMPORTANT: Do NOT use <img> tags, background-image URLs, or any external image links anywhere in your code.
+     Render every image, photo, logo, avatar, or thumbnail as a solid gray block:
+     <div class="bg-gray-400"></div> with the same size and position as in the screenshot.
+     Small icons may be reproduced with unicode/emoji characters or pure CSS instead."""
+
 # English prompts for each region
 PROMPT_DICT = {
     "sidebar": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["sidebar"]}
      Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
      Please ensure that all block layouts, icon styles, sizes, and text information are consistent with the original screenshot,
-     based on the user's additional conditions. Below is the code template to fill in:
+     based on the user's additional conditions.{NO_IMG_RULE}
+     Below is the code template to fill in:
 
      <div>
      your code here
@@ -114,7 +125,8 @@ PROMPT_DICT = {
     "header": f"""This is a screenshot of a container. Here is the user's additional instruction: {user_instruction["header"]}
      Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
      Please ensure that all blocks' relative positions, layout, text information, and colors within the bounding box
-     are consistent with the original screenshot, based on the user's additional conditions. Below is the code template to fill in:
+     are consistent with the original screenshot, based on the user's additional conditions.{NO_IMG_RULE}
+     Below is the code template to fill in:
 
      <div>
      your code here
@@ -126,7 +138,8 @@ PROMPT_DICT = {
      Please fill in a complete HTML and Tailwind CSS code to accurately reproduce the given container.
      Please ensure that all blocks' relative positions, text layout, and colors within the bounding box
      are consistent with the original screenshot, based on the user's additional conditions.
-     Please use the same icons as in the original screenshot. Below is the code template to fill in:
+     Please use the same icons as in the original screenshot.{NO_IMG_RULE}
+     Below is the code template to fill in:
 
      <div>
      your code here
@@ -139,7 +152,8 @@ PROMPT_DICT = {
      Please replace the images in the original screenshot with solid gray blocks (bg-gray-400 tailwind class) of the same size;
      text inside the images does not need to be recognized.
      Please ensure that all blocks' relative positions, layout, text information, and colors within the bounding box
-     are consistent with the original screenshot, based on the user's additional conditions. Below is the code template to fill in:
+     are consistent with the original screenshot, based on the user's additional conditions.{NO_IMG_RULE}
+     Below is the code template to fill in:
 
      <div>
      your code here
@@ -230,7 +244,7 @@ def generate_code_parallel(bbox_tree, img_path, bot):
                         # Basic sanity checks to detect model hallucination
                         if not html_code.strip():
                             raise ValueError("Empty HTML output.")
-                        if re.search(r'([^<>\s])\1{20,}',
+                        if re.search(r'([^<>\s])\1{50,}',
                                      html_code):  # Hallucinated repetitive sequence (not spaces/tags)
                             raise ValueError("Hallucinated repetitive sequence detected.")
 
@@ -405,20 +419,20 @@ def generate_html(bbox_tree, output_file="output.html", img_path="data/test1.png
     soup = bs4.BeautifulSoup(html_content, 'html.parser')
     html_content = str(soup)
 
-    with open(output_file, 'w') as f:
+    with open(output_file, 'w', encoding="utf-8", errors="replace") as f:
         f.write(html_content)
 
 
 # Substitute the code in the html file
 def code_substitution(html_file, code_dict):
     """substitute the code in the html file"""
-    with open(html_file, "r") as f:
+    with open(html_file, "r", encoding="utf-8", errors="replace") as f:
         html = f.read()
     soup = bs4.BeautifulSoup(html, 'html.parser')
     for id, code in code_dict.items():
         code = extract_html_payload(code)
-        # Fix backslash-escaped quotes to prevent BeautifulSoup from mangling Tailwind classes
-        code = code.replace('\\"', '"')
+        # NOTE: extract_html_payload already unescapes \" in its JSON paths;
+        # a second blanket replace here would corrupt legitimate \" sequences.
 
         # Clean up known Qwen-VL hallucinations (long strings of stripped tokens like divclass=relativedivclass...)
         code = re.sub(r'divclass=[a-zA-Z0-9]+(?:endid|div)*', '', code)
@@ -430,14 +444,14 @@ def code_substitution(html_file, code_dict):
     # IMPORTANT: Do NOT use soup.prettify() — it mangles Tailwind class attributes
     # by splitting multi-word class values into separate broken attributes.
     # soup.decode(formatter="minimal") preserves the original attribute formatting.
-    with open(html_file, "w") as f:
+    with open(html_file, "w", encoding="utf-8", errors="replace") as f:
         f.write(soup.decode(formatter="minimal"))
 
 
 def html_refinement(html_file, output_file, img_path, bot):
     """refine the html file"""
     try:
-        with open(html_file, "r") as f:
+        with open(html_file, "r", encoding="utf-8", errors="replace") as f:
             html_content = f.read()
 
         img = Image.open(img_path)
@@ -447,7 +461,7 @@ def html_refinement(html_file, output_file, img_path, bot):
         refined_html = bot.ask(prompt, encode_image(img))
         refined_html = extract_html_payload(refined_html)
 
-        with open(output_file, "w") as f:
+        with open(output_file, "w", encoding="utf-8", errors="replace") as f:
             f.write(refined_html)
     except Exception as e:
         print(f"An error occurred during HTML refinement: {e}")

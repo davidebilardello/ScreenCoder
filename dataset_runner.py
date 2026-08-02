@@ -125,9 +125,10 @@ def _wait_for_vllm(base_url: str, timeout: float = 1800.0) -> bool:
     return False
 
 
-def run_pipeline_for_image(image_path: Path, sample_out: Path, work_root: Path):
+def run_pipeline_for_image(image_path: Path, sample_out: Path, work_root: Path) -> bool:
     """Run the full pipeline on `image_path` and collect outputs into `sample_out`.
-    `work_root` is an isolated per-sample directory used for intermediate I/O."""
+    `work_root` is an isolated per-sample directory used for intermediate I/O.
+    Returns True if the pipeline degraded (produced output via a fallback path)."""
     sample_out.mkdir(parents=True, exist_ok=True)
     sample_tmp_dst = sample_out / "tmp"
 
@@ -166,11 +167,25 @@ def run_pipeline_for_image(image_path: Path, sample_out: Path, work_root: Path):
         shutil.rmtree(sample_tmp_dst)
     shutil.copytree(work_tmp, sample_tmp_dst)
 
+    # Surface (or clear) the degraded marker written by pipeline fallback paths,
+    # so retry runs can tell apart clean outputs from degraded ones.
+    degraded_src = work_tmp / "degraded.flag"
+    degraded_dst = sample_out / "degraded.flag"
+    if degraded_src.exists():
+        shutil.copy2(degraded_src, degraded_dst)
+    else:
+        degraded_dst.unlink(missing_ok=True)
+
     rendered_png = sample_out / "rendered.png"
     try:
-        render_html_to_png(sample_out / "generated.html", rendered_png)
+        # Stessa risoluzione degli screenshot ScreenBench (input.png), così
+        # evaluation.py confronta immagini rese alla stessa larghezza di pagina
+        render_html_to_png(sample_out / "generated.html", rendered_png,
+                           viewport=(1920, 1080))
     except Exception as e:
         print(f"[warn] rendering failed for {sample_out.name}: {e}")
+
+    return degraded_src.exists()
 
 
 def _to_key(name: str):
@@ -201,8 +216,9 @@ def _process_one_sample(name: str, img_bytes: bytes, html_bytes: bytes,
         tmp_img_path = Path(tf.name)
 
     try:
-        run_pipeline_for_image(tmp_img_path, sample_out, work_root)
-        return (name, "ok")
+        degraded = run_pipeline_for_image(tmp_img_path, sample_out, work_root)
+        (sample_out / "error.log").unlink(missing_ok=True)
+        return (name, "degraded" if degraded else "ok")
     except Exception as e:
         print(f"[error] {name}: {e}")
         traceback.print_exc()
@@ -222,13 +238,13 @@ def _process_local_sample(image_path: Path, html_path: Path | None, name: str,
     sample_out.mkdir(parents=True, exist_ok=True)
     if html_path and html_path.exists():
         shutil.copy2(html_path, sample_out / "reference.html")
-    else:
-        # Create an empty reference.html if not present, to keep eval script happy
-        (sample_out / "reference.html").write_text("")
+    # evaluation.py compares input.png vs rendered.png, so a missing
+    # reference.html is fine — no empty placeholder file needed.
 
     try:
-        run_pipeline_for_image(image_path, sample_out, work_root)
-        return (name, "ok")
+        degraded = run_pipeline_for_image(image_path, sample_out, work_root)
+        (sample_out / "error.log").unlink(missing_ok=True)
+        return (name, "degraded" if degraded else "ok")
     except Exception as e:
         print(f"[error] {name}: {e}")
         traceback.print_exc()
@@ -244,7 +260,8 @@ def run_local_directory(input_dir: Path, output_dir: Path, limit: int | None = N
                         vllm_url: str | None = None,
                         vllm_model: str | None = None,
                         vllm_timeout: float = 1800.0,
-                        shuffle_data: bool = False):
+                        shuffle_data: bool = False,
+                        shuffle_seed: int = 42):
     input_dir = Path(input_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -271,7 +288,8 @@ def run_local_directory(input_dir: Path, output_dir: Path, limit: int | None = N
 
     if shuffle_data:
         import random
-        random.shuffle(img_files)
+        # Fixed seed so shuffle+limit selects a reproducible subset across runs
+        random.Random(shuffle_seed).shuffle(img_files)
 
     if limit is not None:
         img_files = img_files[:limit]
@@ -287,7 +305,8 @@ def run_local_directory(input_dir: Path, output_dir: Path, limit: int | None = N
     for img_path in img_files:
         name = img_path.stem
         sample_out = output_dir / name
-        if skip_existing and (sample_out / "generated.html").exists():
+        if skip_existing and (sample_out / "generated.html").exists() \
+                and not (sample_out / "degraded.flag").exists():
             results.append((name, "skipped"))
             continue
 
@@ -312,7 +331,8 @@ def run_local_directory(input_dir: Path, output_dir: Path, limit: int | None = N
     ok = sum(1 for _, s in results if s == "ok")
     err = sum(1 for _, s in results if s == "error")
     skp = sum(1 for _, s in results if s == "skipped")
-    print(f"\nLocal run complete: {ok} ok, {err} errors, {skp} skipped (total {len(results)})")
+    dgr = sum(1 for _, s in results if s == "degraded")
+    print(f"\nLocal run complete: {ok} ok, {dgr} degraded, {err} errors, {skp} skipped (total {len(results)})")
     return results
 
 
@@ -321,7 +341,8 @@ def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None,
                 vllm_url: str | None = None,
                 vllm_model: str | None = None,
                 vllm_timeout: float = 1800.0,
-                shuffle_data: bool = False):
+                shuffle_data: bool = False,
+                shuffle_seed: int = 42):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -376,7 +397,8 @@ def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None,
 
         if shuffle_data:
             import random
-            random.shuffle(pairs)
+            # Fixed seed so shuffle+limit selects a reproducible subset across runs
+            random.Random(shuffle_seed).shuffle(pairs)
 
         if limit is not None:
             pairs = pairs[:limit]
@@ -389,7 +411,8 @@ def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None,
         for (idx, stem), img_member, html_member in pairs:
             name = f"{idx}_{stem}"
             sample_out = output_dir / name
-            if skip_existing and (sample_out / "generated.html").exists():
+            if skip_existing and (sample_out / "generated.html").exists() \
+                    and not (sample_out / "degraded.flag").exists():
                 results.append((name, "skipped"))
                 continue
             todo.append((name, img_member, html_member, sample_out))
@@ -416,7 +439,8 @@ def run_dataset(repo_id: str, output_dir: Path, limit: int | None = None,
     ok = sum(1 for _, s in results if s == "ok")
     err = sum(1 for _, s in results if s == "error")
     skp = sum(1 for _, s in results if s == "skipped")
-    print(f"\nDataset run complete: {ok} ok, {err} errors, {skp} skipped (total {len(results)})")
+    dgr = sum(1 for _, s in results if s == "degraded")
+    print(f"\nDataset run complete: {ok} ok, {dgr} degraded, {err} errors, {skp} skipped (total {len(results)})")
     return results
 
 
@@ -437,18 +461,21 @@ def main():
     ap.add_argument("--vllm-timeout", type=float, default=1800.0,
                     help="Seconds to wait for the vllm server to become ready (default: 1800).")
     ap.add_argument("--shuffle", action="store_true", help="Randomly shuffle the dataset or input directory before processing.")
+    ap.add_argument("--seed", type=int, default=42, help="Seed for --shuffle (fixed default keeps shuffle+limit subsets reproducible).")
     args = ap.parse_args()
 
     if args.input_dir:
         run_local_directory(args.input_dir, args.output, limit=args.limit,
                             skip_existing=not args.no_skip_existing,
                             workers=args.workers, vllm_url=args.vllm_url, vllm_model=args.vllm_model,
-                            vllm_timeout=args.vllm_timeout, shuffle_data=args.shuffle)
+                            vllm_timeout=args.vllm_timeout, shuffle_data=args.shuffle,
+                            shuffle_seed=args.seed)
     else:
         run_dataset(args.repo_id, args.output, limit=args.limit,
                     skip_existing=not args.no_skip_existing,
                     workers=args.workers, vllm_url=args.vllm_url, vllm_model=args.vllm_model,
-                    vllm_timeout=args.vllm_timeout, shuffle_data=args.shuffle)
+                    vllm_timeout=args.vllm_timeout, shuffle_data=args.shuffle,
+                    shuffle_seed=args.seed)
 
 
 if __name__ == "__main__":

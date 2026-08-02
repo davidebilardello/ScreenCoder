@@ -12,6 +12,18 @@ def main(args):
     # --- Phase 1: Crop and Save All Images First ---
 
     # 1. Load data
+    if not args.mapping.exists():
+        print(f"Warning: Mapping file {args.mapping} not found. Skipping image replacement.")
+        args.output_html.parent.mkdir(exist_ok=True, parents=True)
+        if args.gray_html.exists():
+            args.output_html.write_text(
+                args.gray_html.read_text(encoding="utf-8", errors="replace"),
+                encoding="utf-8",
+            )
+        with open(tmp_dir() / "degraded.flag", "a", encoding="utf-8") as f:
+            f.write("image_replacer: mapping file missing, gray HTML used as final output\n")
+        return
+
     mapping_data = json.loads(args.mapping.read_text())
     uied_data = json.loads(args.uied.read_text())
     original_image = cv2.imread(str(args.original_image))

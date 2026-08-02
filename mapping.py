@@ -1,7 +1,7 @@
 """
 python script/mapping.py --gray /Users/jimmyzhengyz/Documents/Research/ui2code_demo/public/assets/debug/bboxes.json --uied /Users/jimmyzhengyz/Documents/Research/ui2code_demo/public/assets/demo1_output/ip/demo1_filtered.json --debug overlay.png --debug-src public/assets/demo1.png
 """
-import json, argparse, numpy as np, cv2
+import json, argparse, os, numpy as np, cv2
 from pathlib import Path
 from typing import List, Dict
 from collections import defaultdict
@@ -12,7 +12,9 @@ import sys
 
 from pipeline_paths import input_dir, tmp_dir, PIPELINE_STEM
 
-CIOU_STRICT = 0.1      # Min CIoU score for a valid one-to-one mapping
+# Min CIoU score for a valid one-to-one mapping (CIoU in [-1, 1]).
+# Overridable per-run: SCREENCODER_CIOU_STRICT=0.2 sbatch run_eval_cluster.sbatch
+CIOU_STRICT = float(os.environ.get("SCREENCODER_CIOU_STRICT", "0.1"))
 FILTER_MIN_WH = 10     # UIED filter: ignore boxes smaller than this
 
 # Tools
